@@ -48,6 +48,8 @@ require("./src/routes/audios.js")(app);
 require("./src/routes/follows.js")(app, io, userSockets);
 require("./src/routes/profileImage.js")(app);
 require("./src/routes/users.js")(app);
+require("./src/routes/spotify.js")(app);
+require("./src/routes/notifications.js")(app);
 
 
 pool.connect({
