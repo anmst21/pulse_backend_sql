@@ -1,6 +1,8 @@
 const express = require('express');
 const UsersRouter = require('./routes/users')
 const FollowsRouter = require('./routes/follows.js')
+const ProfileImageRouter = require('./routes/profileImage.js')
+const AudiosRouter = require('./routes/audios.js')
 const passport = require('passport')
 const cookieParser = require("cookie-parser");
 require("./services/passport.js");
@@ -15,6 +17,8 @@ module.exports = () => {
     app.use(passport.initialize());
     app.use(UsersRouter)
     app.use(FollowsRouter)
+    app.use(ProfileImageRouter)
+    app.use(AudiosRouter)
     return app;
 }
 

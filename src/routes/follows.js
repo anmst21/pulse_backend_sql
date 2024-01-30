@@ -131,9 +131,15 @@ router.get('/user/:id', async (req, res) => {
             [userId]
         );
 
+        const postsCountQuery = await pool.query(
+            'SELECT COUNT(*) FROM audios WHERE user_id = $1',
+            [userId]
+        );
+
         // Adding followers and following counts to the user object
         user.followersCount = parseInt(followersCountQuery.rows[0].count);
         user.followingCount = parseInt(followingCountQuery.rows[0].count);
+        user.postsCount = parseInt(postsCountQuery.rows[0].count);
 
         res.json(user);
     } catch (error) {
