@@ -1,9 +1,8 @@
 const pool = require('../pool');
 
 
-module.exports = (app) => {
+module.exports = (app, io, userSockets) => {
     app.post('/user/follow', async (req, res) => {
-
         try {
             const { leaderId, followerId } = req.body; // IDs of the users involved in the follow action
 
@@ -14,14 +13,27 @@ module.exports = (app) => {
             }
 
             // Insert the new follower relationship
-            await pool.query('INSERT INTO followers (leader_id, follower_id) VALUES ($1, $2)', [leaderId, followerId]);
+            await pool.query(`
+                INSERT INTO notifications (to_user_id, from_user_id, type)
+                VALUES ($1, $2, $3)
+            `, [followerId, leaderId, 'follow']);
+
+
+
+            const targetSocketId = userSockets[followerId];
+
+            if (targetSocketId) {
+                io.to(targetSocketId).emit("notification", {
+                    message: `User ${updatedUser.userName} is now following you`,
+                });
+            }
+
 
             res.status(200).json({ message: "Followed successfully" });
         } catch (error) {
             console.error(error);
             res.status(500).json({ message: "Server error" });
         }
-
     })
 
     app.post('/user/unfollow', async (req, res) => {
