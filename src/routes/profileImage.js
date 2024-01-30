@@ -4,8 +4,7 @@
 require('dotenv').config();
 const pool = require('../pool');
 
-const express = require('express');
-const router = express.Router();
+
 
 
 
@@ -25,89 +24,89 @@ const s3Client = new S3Client({
     },
 });
 
+module.exports = (app) => {
+    app.post("/user/deleteImage", async (req, res) => {
+        try {
+            const { key } = req.body;
 
-router.post("/user/deleteImage", async (req, res) => {
-    try {
-        const { key } = req.body;
+            if (!key) {
+                return res.status(400).send("No file key provided");
+            }
 
-        if (!key) {
-            return res.status(400).send("No file key provided");
+            // Deleting from Amazon S3
+            const deleteCommand = new DeleteObjectCommand({
+                Bucket: "my-photo-bucket-111", // Assuming same bucket is used for images
+                Key: key,
+            });
+
+            await s3Client.send(deleteCommand);
+
+            res
+                .status(200)
+                .send({ message: "File and database record deleted successfully" });
+        } catch (error) {
+            console.error("Error deleting file:", error);
+            res.status(500).send("Server Error");
         }
-
-        // Deleting from Amazon S3
-        const deleteCommand = new DeleteObjectCommand({
-            Bucket: "my-photo-bucket-111", // Assuming same bucket is used for images
-            Key: key,
-        });
-
-        await s3Client.send(deleteCommand);
-
-        res
-            .status(200)
-            .send({ message: "File and database record deleted successfully" });
-    } catch (error) {
-        console.error("Error deleting file:", error);
-        res.status(500).send("Server Error");
-    }
-});
+    });
 
 
 
-router.post("/user/saveImageLink", async (req, res) => {
-    try {
-        const { imageLink, userId } = req.body;
+    app.post("/user/saveImageLink", async (req, res) => {
+        try {
+            const { imageLink, userId } = req.body;
 
-        // Check if the user exists
-        const userQuery = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+            // Check if the user exists
+            const userQuery = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
 
-        if (userQuery.rows.length === 0) {
-            return res.status(404).json({ message: "User not found" });
+            if (userQuery.rows.length === 0) {
+                return res.status(404).json({ message: "User not found" });
+            }
+
+            let user = userQuery.rows[0];
+
+            // Update the existing image link
+            const updateQuery = await pool.query(
+                'UPDATE users SET image_link = $1 WHERE id = $2 RETURNING *',
+                [imageLink, userId]
+            );
+
+            user = updateQuery.rows[0];
+
+            res.status(200).json(user);
+        } catch (error) {
+            console.error("Error saving or updating image:", error);
+            res.status(500).send("Server Error");
         }
-
-        let user = userQuery.rows[0];
-
-        // Update the existing image link
-        const updateQuery = await pool.query(
-            'UPDATE users SET image_link = $1 WHERE id = $2 RETURNING *',
-            [imageLink, userId]
-        );
-
-        user = updateQuery.rows[0];
-
-        res.status(200).json(user);
-    } catch (error) {
-        console.error("Error saving or updating image:", error);
-        res.status(500).send("Server Error");
-    }
-});
+    });
 
 
-router.get("/user/createImage", async (req, res) => {
-    try {
-        const userId = req.query.userId;
-        if (!userId) {
-            return res.status(400).send("No userId provided in headers");
+    app.get("/user/createImage", async (req, res) => {
+        try {
+            const userId = req.query.userId;
+            if (!userId) {
+                return res.status(400).send("No userId provided in headers");
+            }
+
+            let uuid = uuidv4();
+            const key = `${userId}/${uuid}.png`; // Assuming PNG images
+
+            const command = new PutObjectCommand({
+                Bucket: "my-photo-bucket-111", // Assuming same bucket is used for images
+                Key: key,
+                ContentType: "image/jpeg", // Change if not PNG
+            });
+
+            const signedUrl = await getSignedUrl(s3Client, command, {
+                expiresIn: 3600,
+            });
+
+            res.send({ key, url: signedUrl });
+        } catch (err) {
+            console.error(err);
+            res.status(500).send("Failed to generate signed URL");
         }
-
-        let uuid = uuidv4();
-        const key = `${userId}/${uuid}.png`; // Assuming PNG images
-
-        const command = new PutObjectCommand({
-            Bucket: "my-photo-bucket-111", // Assuming same bucket is used for images
-            Key: key,
-            ContentType: "image/jpeg", // Change if not PNG
-        });
-
-        const signedUrl = await getSignedUrl(s3Client, command, {
-            expiresIn: 3600,
-        });
-
-        res.send({ key, url: signedUrl });
-    } catch (err) {
-        console.error(err);
-        res.status(500).send("Failed to generate signed URL");
-    }
-});
+    });
 
 
-module.exports = router;
+}
