@@ -8,6 +8,7 @@ module.exports = (app) => {
             const userId = req.body.userId; // Ensure the userId is provided as a query parameter
 
             if (isNaN(userId)) {
+
                 return res.status(400).json({ message: "Invalid user ID" });
             }
 

@@ -39,13 +39,14 @@ io.on("connection", (socket) => {
     });
 });
 
-app.use(bodyParser.json());
+app.use(express.json());
 app.use(passport.initialize());
 app.use(cors());
 app.use(cookieParser());
 
 require("./src/routes/audios.js")(app);
 require("./src/routes/follows.js")(app, io, userSockets);
+require("./src/routes/subscribes.js")(app, io, userSockets);
 require("./src/routes/profileImage.js")(app);
 require("./src/routes/users.js")(app);
 require("./src/routes/spotify.js")(app);
