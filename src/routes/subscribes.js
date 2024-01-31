@@ -11,7 +11,7 @@ module.exports = (app, io, userSockets) => {
 
             if (existingRequest.rows.length > 0) {
                 // Update the subscribed field to true
-                await pool.query('UPDATE followers SET subscribed = $1 WHERE leader_id = $2 AND follower_id = $3', ['true', leaderId, followerId]);
+                await pool.query('UPDATE followers SET subscribed = $1 WHERE leader_id = $2 AND follower_id = $3', [true, leaderId, followerId]);
                 res.status(200).json({ message: "Subscription request accepted" });
             } else {
                 res.status(400).json({ message: "No pending subscription request found." });
@@ -86,7 +86,7 @@ module.exports = (app, io, userSockets) => {
                 VALUES ($1, $2, $3)
             `, [followerId, leaderId, 'subscription_request']);
 
-            const targetSocketId = userSockets[targetUserId];
+            const targetSocketId = userSockets[followerId];
             if (targetSocketId) {
                 io.to(targetSocketId).emit("notification", {
                     message: `User ${userRecord.userName} has sent you a subscription request`,
