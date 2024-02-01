@@ -11,6 +11,7 @@ class UserRepo {
         return toCamelCase(rows)[0];
     }
     static async create(username, password, email) {
+        console.log("username, password, email", username, password, email)
         const saltRounds = 10; // Adjust saltRounds as needed
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
@@ -62,6 +63,54 @@ class UserRepo {
 
         // Assuming toCamelCase converts row names to camelCase properties
         return toCamelCase(rows)[0];
+    }
+    static async userData(userId) {
+
+        const userQuery = await pool.query(
+            'SELECT id, username, email, image_link FROM users WHERE id = $1',
+            [userId]
+        );
+
+        const user = userQuery.rows[0];
+
+        if (!user) {
+            return null;
+        }
+        const followingCountQuery = await pool.query(
+            'SELECT COUNT(*) FROM followers WHERE leader_id = $1',
+            [userId]
+        );
+
+
+
+        // Query to count the number of following
+        const followersCountQuery = await pool.query(
+            'SELECT COUNT(*) FROM followers WHERE follower_id = $1',
+            [userId]
+        );
+
+        const subscribersCountQuery = await pool.query(
+            'SELECT COUNT(*) FROM followers WHERE leader_id = $1 AND subscribed = \'true\'',
+            [userId]
+        );
+
+        const subscriptionsCountQuery = await pool.query(
+            'SELECT COUNT(*) FROM followers WHERE follower_id = $1 AND subscribed = \'true\'',
+            [userId]
+        );
+
+        const postsCountQuery = await pool.query(
+            'SELECT COUNT(*) FROM audios WHERE user_id = $1',
+            [userId]
+        );
+
+        // Adding followers and following counts to the user object
+        user.followersCount = parseInt(followersCountQuery.rows[0].count);
+        user.followingCount = parseInt(followingCountQuery.rows[0].count);
+        user.subscribersCount = parseInt(subscribersCountQuery.rows[0].count);
+        user.subscriptionsCount = parseInt(subscriptionsCountQuery.rows[0].count);
+        user.postsCount = parseInt(postsCountQuery.rows[0].count);
+        return user;
     }
 
     static async comparePassword(candidatePassword, storedHash) {

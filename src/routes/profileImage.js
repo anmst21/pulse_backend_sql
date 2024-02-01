@@ -81,9 +81,9 @@ module.exports = (app) => {
     });
 
 
-    app.get("/user/createImage", async (req, res) => {
+    app.post("/user/createImage", async (req, res) => {
         try {
-            const userId = req.query.userId;
+            const userId = req.body.userId;
             if (!userId) {
                 return res.status(400).send("No userId provided in headers");
             }

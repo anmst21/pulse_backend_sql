@@ -84,7 +84,7 @@ module.exports = (app) => {
         }
     });
 
-    app.get("spotify/login", (req, res) => {
+    app.get("/spotify/login", (req, res) => {
         const state = uuidv4();
         const scope = "user-read-private user-read-email";
         res.cookie(stateKey, state);

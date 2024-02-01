@@ -120,4 +120,43 @@ module.exports = (app, io, userSockets) => {
             res.status(500).json({ message: "Server error" });
         }
     });
+
+
+    app.get('/user/:id/subscribers', async (req, res) => {
+        try {
+            const userId = parseInt(req.params.id);
+
+            const subscribersQuery = await pool.query(
+                `SELECT u.* 
+             FROM users u
+             INNER JOIN followers f ON u.id = f.follower_id
+             WHERE f.leader_id = $1 AND f.subscribed = 'true'`,
+                [userId]
+            );
+
+            res.json(subscribersQuery.rows);
+        } catch (error) {
+            console.error(error);
+            res.status(500).send('Server error');
+        }
+    });
+
+    app.get('/user/:id/subscribing', async (req, res) => {
+        try {
+            const userId = parseInt(req.params.id);
+
+            const subscriptionsQuery = await pool.query(
+                `SELECT u.* 
+             FROM users u
+             INNER JOIN followers f ON u.id = f.leader_id
+             WHERE f.follower_id = $1 AND f.subscribed = 'true'`,
+                [userId]
+            );
+
+            res.json(subscriptionsQuery.rows);
+        } catch (error) {
+            console.error(error);
+            res.status(500).send('Server error');
+        }
+    });
 };

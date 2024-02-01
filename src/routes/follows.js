@@ -86,7 +86,14 @@ module.exports = (app, io, userSockets) => {
 
             // Query to fetch the list of users the specified user is following
             const followingQuery = await pool.query(
-                'SELECT users.* FROM users INNER JOIN followers ON users.id = followers.leader_id WHERE followers.follower_id = $1',
+                `SELECT u.*, 
+                    f_subscribed.subscribed as subscribed,
+                    CASE WHEN f_reverse.follower_id IS NOT NULL THEN 'true' ELSE 'false' END as follows
+             FROM users u
+             INNER JOIN followers f ON u.id = f.follower_id
+             LEFT JOIN followers f_subscribed ON f_subscribed.follower_id = f.leader_id AND f_subscribed.leader_id = f.follower_id
+             LEFT JOIN followers f_reverse ON f_reverse.follower_id = f.leader_id AND f_reverse.leader_id = u.id
+             WHERE f.leader_id = $1`,
                 [userId]
             );
 
@@ -100,10 +107,15 @@ module.exports = (app, io, userSockets) => {
     app.get('/user/:id/followers', async (req, res) => {
         try {
             const userId = parseInt(req.params.id);
-
-            // Query to fetch the list of users who follow the specified user
             const followersQuery = await pool.query(
-                'SELECT users.* FROM users INNER JOIN followers ON users.id = followers.follower_id WHERE followers.leader_id = $1',
+                `SELECT u.*, 
+                    f_subscribed.subscribed as subscribed,
+                    CASE WHEN f_reverse.follower_id IS NOT NULL THEN 'true' ELSE 'false' END as follows
+             FROM users u
+             INNER JOIN followers f ON u.id = f.leader_id
+             LEFT JOIN followers f_subscribed ON f_subscribed.leader_id = f.follower_id AND f_subscribed.follower_id = f.leader_id
+             LEFT JOIN followers f_reverse ON f_reverse.leader_id = f.follower_id AND f_reverse.follower_id = u.id
+             WHERE f.follower_id = $1`,
                 [userId]
             );
 
@@ -114,51 +126,6 @@ module.exports = (app, io, userSockets) => {
         }
     })
 
-
-    app.get('/user/:id', async (req, res) => {
-        try {
-            const userId = parseInt(req.params.id);
-
-            // Query to fetch the user details
-            const userQuery = await pool.query(
-                'SELECT id, username, email, image_link FROM users WHERE id = $1',
-                [userId]
-            );
-            // If user not found
-            if (userQuery.rows.length === 0) {
-                return res.status(404).json({ message: "User not found" });
-            }
-
-            const user = userQuery.rows[0];
-
-            // Query to count the number of followers
-            const followersCountQuery = await pool.query(
-                'SELECT COUNT(*) FROM followers WHERE leader_id = $1',
-                [userId]
-            );
-
-            // Query to count the number of following
-            const followingCountQuery = await pool.query(
-                'SELECT COUNT(*) FROM followers WHERE follower_id = $1',
-                [userId]
-            );
-
-            const postsCountQuery = await pool.query(
-                'SELECT COUNT(*) FROM audios WHERE user_id = $1',
-                [userId]
-            );
-
-            // Adding followers and following counts to the user object
-            user.followersCount = parseInt(followersCountQuery.rows[0].count);
-            user.followingCount = parseInt(followingCountQuery.rows[0].count);
-            user.postsCount = parseInt(postsCountQuery.rows[0].count);
-
-            res.json(user);
-        } catch (error) {
-            console.error(error);
-            res.status(500).send('Server error');
-        }
-    });
 
 
 }
