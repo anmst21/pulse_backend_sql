@@ -29,23 +29,22 @@ module.exports = (app) => {
                 return res.status(400).json({ message: "User already registered." });
             }
             user = await UserRepo.create(userName, password, email);
-
+            const userWithData = await UserRepo.userData(user.id)
             req.logIn(user, { session: false }, async (err) => {
                 if (err) return next(err);
 
                 try {
                     const token = jwt.sign({ userId: user.id }, "process.env.JWT_SECRET");
-                    console.log(token);
                     res.json({
                         message: "User registered and authenticated successfully.",
                         email: email,
                         userId: user.id.toString(),
                         token,
                         userName,
+                        userInfo: userWithData
                     });
                 } catch (error) {
-                    console.log(error);
-                    return next(error);
+                    console.error(error)
                 }
             });
         } catch (error) {
@@ -93,7 +92,6 @@ module.exports = (app) => {
 
 
             const userWithData = await UserRepo.userData(userId)
-            console.log(userWithData)
             if (userWithData === null) {
                 return res.status(404).json({ message: "User not found" });
             }

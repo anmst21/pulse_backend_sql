@@ -89,12 +89,12 @@ class UserRepo {
             [userId]
         );
 
-        const subscribersCountQuery = await pool.query(
+        const subscriptionsCountQuery = await pool.query(
             'SELECT COUNT(*) FROM followers WHERE leader_id = $1 AND subscribed = \'true\'',
             [userId]
         );
 
-        const subscriptionsCountQuery = await pool.query(
+        const subscribersCountQuery = await pool.query(
             'SELECT COUNT(*) FROM followers WHERE follower_id = $1 AND subscribed = \'true\'',
             [userId]
         );

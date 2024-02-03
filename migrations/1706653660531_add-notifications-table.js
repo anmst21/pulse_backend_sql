@@ -6,13 +6,12 @@ exports.up = pgm => {
     pgm.sql(`
         CREATE TABLE notifications (
             id SERIAL PRIMARY KEY,
-            to_user_id INTEGER NOT NULL,
-            from_user_id INTEGER NOT NULL,
+            to_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            from_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             type VARCHAR(255) NOT NULL CHECK (type IN ('follow', 'subscription_request')),
             seen BOOLEAN NOT NULL DEFAULT false,
             date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (to_user_id) REFERENCES users(id),
-            FOREIGN KEY (from_user_id) REFERENCES users(id)
+           
         );
     `)
 };

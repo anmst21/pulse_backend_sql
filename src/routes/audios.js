@@ -19,10 +19,29 @@ const s3Client = new S3Client({
 
 
 module.exports = (app) => {
+    app.get('/audios', async (req, res) => {
+        try {
+            const query = `
+            SELECT audios.*, users.username, users.image_link
+            FROM audios
+            JOIN users ON audios.user_id = users.id
+            ORDER BY audios.date_created DESC
+        `;
+            const { rows } = await pool.query(query);
+
+            if (rows.length === 0) {
+                return res.status(404).json({ message: "No audios found." });
+            }
+
+            res.json(rows);
+        } catch (error) {
+            console.error("Error fetching audios:", error);
+            res.status(500).send("Server error");
+        }
+    });
     app.get('/user/:userId/audios', async (req, res) => {
         try {
             const userId = parseInt(req.params.userId); // Get userId from URL params and convert it to integer
-            console.log(userId);
 
             // Check if userId is a valid number
             if (isNaN(userId)) {
@@ -32,7 +51,7 @@ module.exports = (app) => {
             const query = `
             SELECT * FROM audios 
             WHERE user_id = $1
-            ORDER BY date_created 
+            ORDER BY date_created DESC
         `;
             const { rows } = await pool.query(query, [userId]);
 
@@ -49,7 +68,7 @@ module.exports = (app) => {
 
     app.post("/audio/delete", async (req, res) => {
         try {
-            const { id } = req.body; // Assuming id is the ID of the audio in your database
+            const { id, user } = req.body; // Assuming id is the ID of the audio in your database
 
             // Find the audio in the database
             const { rows } = await pool.query('SELECT * FROM audios WHERE id = $1', [id]);
@@ -76,7 +95,6 @@ module.exports = (app) => {
                 // Deleting the audio record from the database
                 await pool.query('DELETE FROM audios WHERE id = $1', [id]);
 
-                console.log("deleteaction");
                 res.status(200).send({ message: "File and database record deleted successfully" });
             }
         } catch (error) {
@@ -98,9 +116,9 @@ module.exports = (app) => {
                 type,
                 fileName,
                 extension,
+                track,
             } = req.body;
 
-            console.log(req.body);
 
             let query = `
             INSERT INTO audios (audio_link, duration, user_id, bpm, size, sound_levels, type, file_name, extension, track)
@@ -110,7 +128,7 @@ module.exports = (app) => {
             let values;
 
             if (type === "spotify") {
-                values = [audioLink, duration, user, bpm, null, null, type, null, null, JSON.stringify({})]; // Assuming track isn't provided for Spotify links
+                values = [audioLink, duration, user, bpm, null, null, type, null, null, JSON.stringify(track)]; // Assuming track isn't provided for Spotify links
             } else {
                 values = [audioLink, duration, user, bpm, size, JSON.stringify(soundLevels), type, fileName, extension, JSON.stringify({})]; // Assuming track isn't provided for non-Spotify links either
             }
@@ -131,7 +149,6 @@ module.exports = (app) => {
             const userId = req.query.userId;
             const dataType = req.query.dataType;
             const extension = req.query.extension;
-            console.log("dataType", dataType);
             if (!userId) {
                 return res.status(400).send("No userId provided in headers");
             }

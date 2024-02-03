@@ -47,6 +47,7 @@ app.use(cookieParser());
 require("./src/routes/audios.js")(app);
 require("./src/routes/follows.js")(app, io, userSockets);
 require("./src/routes/subscribes.js")(app, io, userSockets);
+require("./src/routes/search.js")(app);
 require("./src/routes/profileImage.js")(app);
 require("./src/routes/users.js")(app);
 require("./src/routes/spotify.js")(app);

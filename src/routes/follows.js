@@ -5,7 +5,6 @@ module.exports = (app, io, userSockets) => {
     app.post('/user/follow', async (req, res) => {
         try {
             const { leaderId, followerId } = req.body; // IDs of the users involved in the follow action
-            console.log("leaderId, followerId", leaderId, followerId);
             // Check if the follower relationship already exists
             const existingFollow = await pool.query('SELECT id FROM followers WHERE leader_id = $1 AND follower_id = $2', [leaderId, followerId]);
             if (existingFollow.rows.length > 0) {
@@ -18,16 +17,18 @@ module.exports = (app, io, userSockets) => {
                 VALUES ($1, $2, $3)
             `, [followerId, leaderId, 'follow']);
 
-
+            const query = 'SELECT * FROM users WHERE id = $1';
+            const { rows } = await pool.query(query, [leaderId]);
+            console.log("user", rows[0].username)
 
             const targetSocketId = userSockets[followerId];
 
             if (targetSocketId) {
                 io.to(targetSocketId).emit("notification", {
-                    message: `User ${updatedUser.userName} is now following you`,
+                    message: `User  ${rows[0].username} is now following you`,
                 });
             }
-
+            //${updatedUser.userName}
 
             res.status(200).json({ message: "Followed successfully" });
         } catch (error) {
@@ -86,14 +87,22 @@ module.exports = (app, io, userSockets) => {
 
             // Query to fetch the list of users the specified user is following
             const followingQuery = await pool.query(
-                `SELECT u.*, 
-                    f_subscribed.subscribed as subscribed,
-                    CASE WHEN f_reverse.follower_id IS NOT NULL THEN 'true' ELSE 'false' END as follows
-             FROM users u
-             INNER JOIN followers f ON u.id = f.follower_id
-             LEFT JOIN followers f_subscribed ON f_subscribed.follower_id = f.leader_id AND f_subscribed.leader_id = f.follower_id
-             LEFT JOIN followers f_reverse ON f_reverse.follower_id = f.leader_id AND f_reverse.leader_id = u.id
-             WHERE f.leader_id = $1`,
+                `SELECT
+                    u.id,
+                    u.email,
+                    u.username,
+                    u.image_link,
+                    u.date_created,
+                    CASE
+                        WHEN f2.leader_id IS NOT NULL THEN 'true'
+                        ELSE 'false'
+                    END AS follows,
+                    f2.subscribed
+                FROM followers f
+                INNER JOIN users u ON f.follower_id = u.id
+                LEFT JOIN followers f2 ON f2.follower_id = u.id AND f2.leader_id = $1
+                WHERE f.leader_id = $1
+                ORDER BY f.created_at DESC;`,
                 [userId]
             );
 
@@ -108,14 +117,22 @@ module.exports = (app, io, userSockets) => {
         try {
             const userId = parseInt(req.params.id);
             const followersQuery = await pool.query(
-                `SELECT u.*, 
-                    f_subscribed.subscribed as subscribed,
-                    CASE WHEN f_reverse.follower_id IS NOT NULL THEN 'true' ELSE 'false' END as follows
-             FROM users u
-             INNER JOIN followers f ON u.id = f.leader_id
-             LEFT JOIN followers f_subscribed ON f_subscribed.leader_id = f.follower_id AND f_subscribed.follower_id = f.leader_id
-             LEFT JOIN followers f_reverse ON f_reverse.leader_id = f.follower_id AND f_reverse.follower_id = u.id
-             WHERE f.follower_id = $1`,
+                `SELECT
+                    u.id,
+                    u.email,
+                    u.username,
+                    u.image_link,
+                    f2.created_at,
+                    CASE
+                        WHEN f2.leader_id IS NOT NULL THEN 'true'
+                        ELSE 'false'
+                    END AS follows,
+                    f2.subscribed
+                FROM followers f
+                INNER JOIN users u ON f.leader_id = u.id
+                LEFT JOIN followers f2 ON f2.follower_id = u.id AND f2.leader_id = $1
+                WHERE f.follower_id = $1
+             ORDER BY f.created_at DESC;`,
                 [userId]
             );
 

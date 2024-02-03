@@ -5,7 +5,7 @@ module.exports = (app) => {
 
     app.get("/notifications/fetch", async (req, res) => {
         try {
-            const userId = req.body.userId; // Ensure the userId is provided as a query parameter
+            const userId = req.query.userId; // Ensure the userId is provided as a query parameter
 
             if (isNaN(userId)) {
 

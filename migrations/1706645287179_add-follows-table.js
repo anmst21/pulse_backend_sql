@@ -18,8 +18,8 @@ exports.up = pgm => {
 
 exports.down = pgm => {
     pgm.sql(`
-        DROP TABLE followers;
         DROP TYPE subscription_status;
+        DROP TABLE followers;
     `)
 };
 
