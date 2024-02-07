@@ -22,10 +22,14 @@ module.exports = (app) => {
     app.get('/audios', async (req, res) => {
         try {
             const query = `
-            SELECT audios.*, users.username, users.image_link
-            FROM audios
-            JOIN users ON audios.user_id = users.id
-            ORDER BY audios.date_created DESC
+        SELECT audios.*, users.username, users.image_link,
+               COUNT(CASE WHEN upvotes_downvotes.vote_type = true THEN 1 END) AS upvotes,
+               COUNT(CASE WHEN upvotes_downvotes.vote_type = false THEN 1 END) AS downvotes
+        FROM audios
+        JOIN users ON audios.user_id = users.id
+        LEFT JOIN upvotes_downvotes ON audios.id = upvotes_downvotes.post_id
+        GROUP BY audios.id, users.username, users.image_link
+        ORDER BY audios.date_created DESC
         `;
             const { rows } = await pool.query(query);
 
@@ -33,7 +37,11 @@ module.exports = (app) => {
                 return res.status(404).json({ message: "No audios found." });
             }
 
-            res.json(rows);
+            res.json(rows.map(row => ({
+                ...row,
+                upvotes: parseInt(row.upvotes, 10),
+                downvotes: parseInt(row.downvotes, 10)
+            })));
         } catch (error) {
             console.error("Error fetching audios:", error);
             res.status(500).send("Server error");
