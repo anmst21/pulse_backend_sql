@@ -97,9 +97,9 @@ module.exports = (app) => {
         }
     });
 
-    app.put('/comments/:id', async (req, res) => {
-        const { id } = req.params;
-        const { contents } = req.body; // Assuming the new contents are provided in the body
+    app.put('/comments/:post_id/:contents', async (req, res) => {
+        const { post_id, contents } = req.params;
+        // const { contents } = req.body; // Assuming the new contents are provided in the body
 
         if (!contents) {
             return res.status(400).json({ message: "Please provide new content for the comment." });
@@ -108,7 +108,7 @@ module.exports = (app) => {
         try {
             const updateOp = await pool.query(
                 'UPDATE comments SET contents = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
-                [contents, id]
+                [contents, post_id]
             );
             if (updateOp.rowCount === 0) {
                 return res.status(404).json({ message: "Comment not found" });
