@@ -19,19 +19,32 @@ const s3Client = new S3Client({
 
 
 module.exports = (app) => {
-    app.get('/audios', async (req, res) => {
+    app.get('/audios/:userId', async (req, res) => {
+        const userId = req.params.userId;
+
+
+
         try {
             const query = `
-        SELECT audios.*, users.username, users.image_link,
-               COUNT(CASE WHEN upvotes_downvotes.vote_type = true THEN 1 END) AS upvotes,
-               COUNT(CASE WHEN upvotes_downvotes.vote_type = false THEN 1 END) AS downvotes
-        FROM audios
-        JOIN users ON audios.user_id = users.id
-        LEFT JOIN upvotes_downvotes ON audios.id = upvotes_downvotes.post_id
-        GROUP BY audios.id, users.username, users.image_link
-        ORDER BY audios.date_created DESC
+       SELECT
+                audios.*,
+                users.username,
+                users.image_link,
+                COUNT(CASE WHEN general_upvotes_downvotes.vote_type = true THEN 1 END) AS upvotes,
+                COUNT(CASE WHEN general_upvotes_downvotes.vote_type = false THEN 1 END) AS downvotes,
+                user_vote.vote_type AS user_vote_type
+            FROM audios
+            JOIN users ON audios.user_id = users.id
+            LEFT JOIN upvotes_downvotes AS general_upvotes_downvotes ON audios.id = general_upvotes_downvotes.post_id
+            LEFT JOIN (
+                SELECT post_id, vote_type
+                FROM upvotes_downvotes
+                WHERE user_id = $1
+            ) AS user_vote ON audios.id = user_vote.post_id
+            GROUP BY audios.id, users.username, users.image_link, user_vote.vote_type
+            ORDER BY audios.date_created DESC
         `;
-            const { rows } = await pool.query(query);
+            const { rows } = await pool.query(query, [userId]);
 
             if (rows.length === 0) {
                 return res.status(404).json({ message: "No audios found." });
@@ -40,7 +53,8 @@ module.exports = (app) => {
             res.json(rows.map(row => ({
                 ...row,
                 upvotes: parseInt(row.upvotes, 10),
-                downvotes: parseInt(row.downvotes, 10)
+                downvotes: parseInt(row.downvotes, 10),
+                vote_type: row.user_vote_type
             })));
         } catch (error) {
             console.error("Error fetching audios:", error);
