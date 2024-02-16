@@ -1,4 +1,8 @@
 const pool = require('../pool');
+const fs = require('fs').promises;
+const path = require('path'); // Import path module
+
+
 
 
 module.exports = (app) => {
@@ -63,4 +67,34 @@ module.exports = (app) => {
             res.status(500).json({ message: "Server Error" });
         }
     })
+    // app.post("/add/genres", async (req, res) => {
+    //     try {
+    //         // Function to insert genres into the database
+    //         const insertGenres = async (genres) => {
+    //             await pool.query('BEGIN');
+    //             for (const genre of genres) {
+    //                 await pool.query('INSERT INTO genres (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING', [genre.id, genre.name]);
+    //             }
+    //             await pool.query('COMMIT');
+    //             console.log('Genres inserted successfully.');
+    //         };
+
+    //         // Corrected file path using __dirname to get the absolute path
+    //         const filePath = path.join(__dirname, 'spotifyGenres.json');
+
+    //         // Read the file and parse the JSON
+    //         const data = await fs.readFile(filePath, 'utf8'); // utf8 encoding ensures you get a string back
+    //         const genres = JSON.parse(data);
+
+    //         // Insert the genres into the database
+    //         await insertGenres(genres);
+
+    //         // Respond once the genres have been inserted
+    //         res.status(200).json({ message: "Genres added to db successfully." });
+    //     } catch (error) {
+    //         // If an error occurs, log it and send a server error response
+    //         console.error("Error on /add/genres route:", error);
+    //         res.status(500).json({ message: "Server Error", error: error.message });
+    //     }
+    // });
 }

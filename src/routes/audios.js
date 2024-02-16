@@ -23,31 +23,6 @@ module.exports = (app) => {
     app.get('/audios/:userId', async (req, res) => {
         const userId = req.params.userId;
 
-        // const userWithData = await UserRepo.userData(userId)
-        // if (userWithData === null) {
-        //     return res.status(404).json({ message: "User not found" });
-        // }
-        // // Query to count the number of followers
-
-
-        // const query = `
-        //     SELECT
-        //       u.id,
-        //       u.email,
-        //       u.username,
-        //       u.image_link,
-        //       u.date_created,
-        //       CASE
-        //         WHEN f1.follower_id IS NOT NULL THEN 'true'
-        //         ELSE 'false'
-        //       END AS follows,
-        //       f1.subscribed
-        //     FROM
-        //       users u
-        //     LEFT JOIN followers f1 ON f1.leader_id = $1 AND f1.follower_id = u.id
-        //     ORDER BY
-        //       u.date_created DESC;
-        // `;
 
         try {
             const query = `
@@ -76,6 +51,17 @@ module.exports = (app) => {
                 return res.status(404).json({ message: "No audios found." });
             }
 
+            const result = rows.map(row => ({
+                ...row,
+                upvotes: parseInt(row.upvotes, 10),
+                downvotes: parseInt(row.downvotes, 10),
+                vote_type: row.user_vote_type,
+
+            }))
+
+            console.log("resultresultresult", result)
+
+
             res.json(rows.map(row => ({
                 ...row,
                 upvotes: parseInt(row.upvotes, 10),
@@ -88,6 +74,8 @@ module.exports = (app) => {
             res.status(500).send("Server error");
         }
     });
+
+
     app.get('/user/:userId/audios', async (req, res) => {
         try {
             const userId = parseInt(req.params.userId);
@@ -96,23 +84,23 @@ module.exports = (app) => {
 
             const query = `
              SELECT
-    audios.*,
-    users.username,
-    users.image_link,
-    COUNT(CASE WHEN general_upvotes_downvotes.vote_type = true THEN 1 END) AS upvotes,
-    COUNT(CASE WHEN general_upvotes_downvotes.vote_type = false THEN 1 END) AS downvotes,
-    user_vote.vote_type AS user_vote_type
-FROM audios
-JOIN users ON audios.user_id = users.id
-LEFT JOIN upvotes_downvotes AS general_upvotes_downvotes ON audios.id = general_upvotes_downvotes.post_id
-LEFT JOIN (
-    SELECT post_id, vote_type
-    FROM upvotes_downvotes
-    WHERE user_id = $1  -- This subquery still filters votes made by the provided user ID
-) AS user_vote ON audios.id = user_vote.post_id
-WHERE audios.user_id = $1  -- Filter the main query to only include audios by the provided user ID
-GROUP BY audios.id, users.username, users.image_link, user_vote.vote_type
-ORDER BY audios.date_created DESC;
+                    audios.*,
+                    users.username,
+                    users.image_link,
+                    COUNT(CASE WHEN general_upvotes_downvotes.vote_type = true THEN 1 END) AS upvotes,
+                    COUNT(CASE WHEN general_upvotes_downvotes.vote_type = false THEN 1 END) AS downvotes,
+                    user_vote.vote_type AS user_vote_type
+                FROM audios
+                JOIN users ON audios.user_id = users.id
+                LEFT JOIN upvotes_downvotes AS general_upvotes_downvotes ON audios.id = general_upvotes_downvotes.post_id
+                LEFT JOIN (
+                    SELECT post_id, vote_type
+                    FROM upvotes_downvotes
+                    WHERE user_id = $1  -- This subquery still filters votes made by the provided user ID
+                ) AS user_vote ON audios.id = user_vote.post_id
+                WHERE audios.user_id = $1  -- Filter the main query to only include audios by the provided user ID
+                GROUP BY audios.id, users.username, users.image_link, user_vote.vote_type
+                ORDER BY audios.date_created DESC;
         `;
             const { rows } = await pool.query(query, [userId]);
 
@@ -121,12 +109,17 @@ ORDER BY audios.date_created DESC;
             }
 
 
-            res.json(rows.map(row => ({
+
+            const result = rows.map(row => ({
                 ...row,
                 upvotes: parseInt(row.upvotes, 10),
                 downvotes: parseInt(row.downvotes, 10),
                 vote_type: row.user_vote_type
-            })));
+            }))
+
+            console.log("resultresultresult", result)
+
+            res.json(result);
         } catch (error) {
             console.error("Error fetching audios:", error);
             res.status(500).send("Server error");
