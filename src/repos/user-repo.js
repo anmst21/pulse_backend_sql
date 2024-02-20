@@ -67,7 +67,7 @@ class UserRepo {
     static async userData(userId) {
 
         const userQuery = await pool.query(
-            'SELECT id, username, email, image_link FROM users WHERE id = $1',
+            'SELECT id, username, email, image_link, bio, link FROM users WHERE id = $1',
             [userId]
         );
 

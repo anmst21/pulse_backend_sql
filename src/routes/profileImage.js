@@ -27,20 +27,28 @@ const s3Client = new S3Client({
 module.exports = (app) => {
     app.post("/user/deleteImage", async (req, res) => {
         try {
-            const { key } = req.body;
+            const { keys } = req.body;
 
-            if (!key) {
-                return res.status(400).send("No file key provided");
+            if (!keys) {
+                return res.status(400).send("No file keys provided");
             }
 
-            // Deleting from Amazon S3
-            const deleteCommand = new DeleteObjectCommand({
-                Bucket: "my-photo-bucket-111", // Assuming same bucket is used for images
-                Key: key,
+            const deleteCommandSmall = new DeleteObjectCommand({
+                Bucket: "my-photo-bucket-111",
+                Key: keys.small,
             });
-
-            await s3Client.send(deleteCommand);
-
+            await s3Client.send(deleteCommandSmall);
+            const deleteCommandMedium = new DeleteObjectCommand({
+                Bucket: "my-photo-bucket-111",
+                Key: keys.medium,
+            });
+            await s3Client.send(deleteCommandMedium);
+            const deleteCommandLarge = new DeleteObjectCommand({
+                Bucket: "my-photo-bucket-111",
+                Key: keys.large,
+            });
+            await s3Client.send(deleteCommandLarge);
+            console.log("record deleted")
             res
                 .status(200)
                 .send({ message: "File and database record deleted successfully" });
@@ -55,7 +63,7 @@ module.exports = (app) => {
     app.post("/user/saveImageLink", async (req, res) => {
         try {
             const { imageLink, userId } = req.body;
-
+            console.log("imageLinkimageLinkimageLink", imageLink)
             // Check if the user exists
             const userQuery = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
 
@@ -83,14 +91,14 @@ module.exports = (app) => {
 
     app.post("/user/createImage", async (req, res) => {
         try {
-            const userId = req.body.userId;
+            const { userId, size } = req.body;
             if (!userId) {
                 return res.status(400).send("No userId provided in headers");
             }
 
             let uuid = uuidv4();
-            const key = `${userId}/${uuid}.png`; // Assuming PNG images
-
+            const key = `${userId}/${size}/${uuid}.png`; // Assuming PNG images
+            console.log("keykeykey", key)
             const command = new PutObjectCommand({
                 Bucket: "my-photo-bucket-111", // Assuming same bucket is used for images
                 Key: key,

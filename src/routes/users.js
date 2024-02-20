@@ -8,6 +8,81 @@ const pool = require('../pool');
 
 
 module.exports = (app) => {
+    app.put('/users/link', async (req, res) => {
+        const id = req.headers['userid'];
+        const { link } = req.body;
+
+        try {
+            if (!id) {
+                return res.status(400).send('User ID is required in headers');
+            }
+
+            const updatedUser = await pool.query(
+                "UPDATE users SET link = $1 WHERE id = $2 RETURNING link",
+                [link, id]
+            );
+
+            if (updatedUser.rows.length > 0) {
+                res.json(updatedUser.rows[0].link);
+            } else {
+                res.status(404).send('User not found');
+            }
+        } catch (err) {
+            console.error(err.message);
+            res.status(500).send('Server error');
+        }
+    });
+
+    app.put('/users/bio', async (req, res) => {
+        const id = req.headers['userid'];
+        const { bio } = req.body;
+        try {
+            if (!id) {
+                return res.status(400).send('User ID is required in headers');
+            }
+
+            const updatedUser = await pool.query(
+                "UPDATE users SET bio = $1 WHERE id = $2 RETURNING bio",
+                [bio, id]
+            );
+
+            if (updatedUser.rows.length > 0) {
+                res.json(updatedUser.rows[0].bio);
+            } else {
+                res.status(404).send('User not found');
+            }
+        } catch (err) {
+            console.error(err.message);
+            res.status(500).send('Server error');
+        }
+    });
+
+    app.put('/users/username', async (req, res) => {
+        const id = req.headers['userid'];
+        const { username } = req.body;
+
+        try {
+            if (!id) {
+                return res.status(400).send('User ID is required in headers');
+            }
+
+            const updatedUser = await pool.query(
+                "UPDATE users SET username = $1 WHERE id = $2 RETURNING username",
+                [username, id]
+            );
+            console.log("updatedUserupdatedUserupdatedUser", updatedUser)
+            if (updatedUser.rows.length > 0) {
+                res.json(updatedUser.rows[0].username);
+            } else {
+                res.status(404).send('User not found');
+            }
+        } catch (err) {
+            console.error(err.message);
+            res.status(500).send('Server error');
+        }
+    });
+
+
     app.post('/users', async (req, res) => {
         const { username, bio } = req.body;
 
