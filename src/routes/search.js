@@ -15,6 +15,10 @@ module.exports = (app) => {
       WHERE user_id = $1 AND genre_id = $2
     );
   `;
+    const objectQuery = `
+        SELECT * FROM genres WHERE id = $1
+      `
+    const { rows } = await pool.query(objectQuery, [genre_id])
 
     try {
       const checkResult = await pool.query(checkQuery, [user_id, genre_id]);
@@ -26,8 +30,9 @@ module.exports = (app) => {
         DELETE FROM user_genre
         WHERE user_id = $1 AND genre_id = $2;
       `;
+
         await pool.query(deleteQuery, [user_id, genre_id]);
-        res.status(200).send({ action: 'deleted', user_id, genre_id });
+        res.status(200).send({ action: 'deleted', record: rows[0] });
       } else {
         // Record does not exist, insert it
         const insertQuery = `
@@ -35,8 +40,8 @@ module.exports = (app) => {
         VALUES ($1, $2)
         RETURNING *;
       `;
-        const insertResult = await pool.query(insertQuery, [user_id, genre_id]);
-        res.status(201).json({ action: 'inserted', record: insertResult.rows[0] });
+        await pool.query(insertQuery, [user_id, genre_id]);
+        res.status(201).json({ action: 'inserted', record: rows[0] });
       }
     } catch (error) {
       console.error('Error executing toggle operation for user_genre', error.stack);
@@ -79,27 +84,29 @@ module.exports = (app) => {
   });
 
   app.get("/search/genres", async (req, res) => {
-    const searchQuery = req.query.searchQuery; // Retrieve the search query from query parameters
+    const searchQuery = req.query.searchQuery;
+    const loggedInUserId = req.query.loggedInUserId;
 
-    // SQL query to select genres with a name that matches the regex search pattern
+    // Updated query to include a LEFT JOIN on user_genre table and a CASE statement to set 'active'
     const query = `
         SELECT
-          id,
-          name
+          g.id,
+          g.name,
+          CASE WHEN ug.genre_id IS NOT NULL THEN true ELSE false END AS active
         FROM
-          genres
+          genres g
+          LEFT JOIN user_genre ug ON g.id = ug.genre_id AND ug.user_id = $2
         WHERE
-          name ~* $1
+          g.name ILIKE $1
         ORDER BY
-          name;
+          g.name;
     `;
 
     try {
-      // The regex pattern for searchQuery, you might need to adjust it based on your needs
-      const regexPattern = searchQuery; // For example, '.*' + searchQuery + '.*' for a contains search
-      const { rows } = await pool.query(query, [regexPattern]);
+      const searchPattern = `%${searchQuery}%`;
+      // Include loggedInUserId in the query parameters
+      const { rows } = await pool.query(query, [searchPattern, loggedInUserId]);
 
-      // Send the results back to the client
       res.json(rows);
     } catch (error) {
       console.error('Error executing search genres query', error.stack);
