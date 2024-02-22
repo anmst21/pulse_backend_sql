@@ -22,3 +22,4 @@ exports.down = pgm => {
         DROP TABLE users;
     `)
 };
+

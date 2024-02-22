@@ -54,6 +54,7 @@ require("./src/routes/spotify.js")(app);
 require("./src/routes/notifications.js")(app);
 require("./src/routes/comments.js")(app);
 require("./src/routes/upvoteDownvote.js")(app);
+require("./src/routes/bookmarks.js")(app);
 
 
 pool.connect({

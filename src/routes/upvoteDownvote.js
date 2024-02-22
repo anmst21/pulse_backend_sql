@@ -4,7 +4,8 @@ const pool = require('../pool');
 module.exports = (app) => {
 
     app.post('/vote', async (req, res) => {
-        const { user_id, post_id, vote_type } = req.body;
+        const { post_id, vote_type } = req.body;
+        const user_id = req.headers['userid'];
 
         try {
             const existingVoteResult = await pool.query(
