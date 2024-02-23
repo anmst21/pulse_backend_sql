@@ -113,12 +113,12 @@ module.exports = (app, io, userSockets) => {
             const query = 'SELECT * FROM users WHERE id = $1';
             const { rows } = await pool.query(query, [leaderId]);
 
-            const targetSocketId = userSockets[followerId];
-            if (targetSocketId) {
-                io.to(targetSocketId).emit("notification", {
-                    message: `User ${rows[0].username} has sent you a subscription request`,
-                });
-            }
+            // const targetSocketId = userSockets[followerId];
+            // if (targetSocketId) {
+            //     io.to(targetSocketId).emit("notification", {
+            //         message: `User ${rows[0].username} has sent you a subscription request`,
+            //     });
+            // }
 
 
         } catch (error) {

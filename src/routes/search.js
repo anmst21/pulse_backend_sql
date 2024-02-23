@@ -48,8 +48,50 @@ module.exports = (app) => {
       res.status(500).send('Internal Server Error');
     }
   });
+  app.post("/fetch/post/genres", async (req, res) => {
+    const userId = req.headers['userid'];
+    const activeIds = req.body.activeIds ? req.body.activeIds : [];
+    const baseIdsToFetch = [39, 91, 138, 209, 457, 478, 480, 500, 498, 583, 780, 659, 664, 677, 8, 688, 718, 722, 592, 1258, 1313, 1288, 1334];
+
+    const query = `
+  WITH user_genres AS (
+    SELECT g.id, g.name
+    FROM genres g
+    JOIN user_genre ug ON ug.genre_id = g.id
+    WHERE ug.user_id = $1
+  ), base_genres AS (
+    SELECT id, name
+    FROM genres
+    WHERE id = ANY($2)
+  ), active_genres AS (
+    SELECT id, name
+    FROM genres
+    WHERE id = ANY($3)
+  ), combined AS (
+    SELECT id, name,
+    CASE WHEN id = ANY($3) THEN true ELSE false END AS active
+    FROM (
+        SELECT id, name FROM user_genres
+        UNION
+        SELECT id, name FROM base_genres
+        UNION
+        SELECT id, name FROM active_genres
+    ) AS all_genres
+  )
+  SELECT * FROM combined ORDER BY id;
+`;
+
+    try {
+      const { rows } = await pool.query(query, [userId, baseIdsToFetch, activeIds]);
+      res.json(rows);
+    } catch (error) {
+      console.error('Error executing fetch genres query', error.stack);
+      res.status(500).send('Internal Server Error');
+    }
+  });
+
   app.get("/fetch/genres", async (req, res) => {
-    const userId = parseInt(req.query.userId); // Assuming userId is passed as a query parameter
+    const userId = parseInt(req.headers['userid']);
     const baseIdsToFetch = [39, 91, 138, 209, 457, 478, 480, 500, 498, 583, 780, 659, 664, 677, 8, 688, 718, 722, 592, 1258, 1313, 1288, 1334];
 
     const query = `
@@ -82,6 +124,40 @@ module.exports = (app) => {
       res.status(500).send('Internal Server Error');
     }
   });
+  app.post("/search/post/genres", async (req, res) => {
+    const searchQuery = req.body.searchQuery;
+    const activeIds = req.body.activeIds.map(id => parseInt(id)).filter(id => !isNaN(id));;
+    const userId = req.headers['userid'];
+    console.log("activeIds", activeIds)
+    const query = `
+        SELECT
+          g.id,
+          g.name,
+          CASE 
+            WHEN g.id = ANY($3::int[]) THEN true
+            ELSE false 
+          END AS active
+        FROM
+          genres g
+          LEFT JOIN user_genre ug ON g.id = ug.genre_id AND ug.user_id = $2
+        WHERE
+          g.name ILIKE $1
+        ORDER BY
+          g.name
+          LIMIT 10;
+    `;
+
+    try {
+      const searchPattern = `%${searchQuery}%`;
+      // Pass activeIds as the third parameter to the query
+      const { rows } = await pool.query(query, [searchPattern, userId, activeIds]);
+
+      res.json(rows);
+    } catch (error) {
+      console.error('Error executing search genres query', error.stack);
+      res.status(500).send('Internal Server Error');
+    }
+  });
 
   app.get("/search/genres", async (req, res) => {
     const searchQuery = req.query.searchQuery;
@@ -99,7 +175,9 @@ module.exports = (app) => {
         WHERE
           g.name ILIKE $1
         ORDER BY
-          g.name;
+          g.name
+          LIMIT 10;
+          ;
     `;
 
     try {

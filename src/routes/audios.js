@@ -20,44 +20,91 @@ const s3Client = new S3Client({
 
 
 module.exports = (app) => {
+
+    app.post("/audios/add-tags", async (req, res) => {
+        const { tagIds, audioId, userId } = req.body;
+
+        // Check if all parameters are present
+        if (!tagIds || !Array.isArray(tagIds) || tagIds.some(isNaN) || isNaN(audioId) || isNaN(userId)) {
+            return res.status(400).send('Invalid input');
+        }
+
+        // Begin transaction
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // Iterate over the tagIds and insert them with audioId
+            for (const genreId of tagIds) {
+                const insertQuery = `
+                INSERT INTO tags (audio_id, genre_id)
+                VALUES ($1, $2)
+                ON CONFLICT (audio_id, genre_id) DO NOTHING; // Assuming you want to ignore duplicate entries
+            `;
+                await client.query(insertQuery, [audioId, genreId]);
+            }
+
+            await client.query('COMMIT');
+            res.send('Tags added successfully');
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error adding tags', error);
+            res.status(500).send('Internal Server Error');
+        } finally {
+            client.release();
+        }
+    });
+
     app.get('/audios', async (req, res) => {
         const userId = req.headers['userid'];
 
         try {
             const query = `
-            SELECT
+                    SELECT
                 audios.*,
                 users.username,
                 (SELECT image_link FROM users WHERE users.id = audios.user_id) AS image_link,
                 COUNT(DISTINCT CASE WHEN general_upvotes_downvotes.vote_type = true THEN general_upvotes_downvotes.id END) AS upvotes,
                 COUNT(DISTINCT CASE WHEN general_upvotes_downvotes.vote_type = false THEN general_upvotes_downvotes.id END) AS downvotes,
-                COUNT(DISTINCT comments.id) AS comment_count, -- Include comments count
-                user_vote.vote_type AS user_vote_type
+                COUNT(DISTINCT comments.id) AS comment_count,
+                user_vote.vote_type AS user_vote_type,
+                CASE
+                    WHEN followers.follower_id IS NOT NULL THEN 'true'
+                    ELSE 'false'
+                END AS follows,
+                followers.subscribed AS subscribed,
+                CASE
+                    WHEN bookmarks.id IS NOT NULL THEN 'true'
+                    ELSE 'false'
+                END AS bookmarked
             FROM audios
             JOIN users ON audios.user_id = users.id
             LEFT JOIN upvotes_downvotes AS general_upvotes_downvotes ON audios.id = general_upvotes_downvotes.post_id
-            LEFT JOIN comments ON audios.id = comments.post_id -- Join with comments table
+            LEFT JOIN comments ON audios.id = comments.post_id
             LEFT JOIN (
                 SELECT post_id, vote_type
                 FROM upvotes_downvotes
                 WHERE user_id = $1
             ) AS user_vote ON audios.id = user_vote.post_id
-            GROUP BY audios.id, users.username, user_vote.vote_type
+            LEFT JOIN followers ON followers.leader_id = $1 AND followers.follower_id = audios.user_id
+            LEFT JOIN bookmarks ON bookmarks.audio_id = audios.id AND bookmarks.user_id = $1
+            GROUP BY audios.id, users.username, user_vote.vote_type, followers.follower_id, followers.subscribed, bookmarks.id
             ORDER BY audios.date_created DESC;
         `;
+
             const { rows } = await pool.query(query, [userId]);
 
             if (rows.length === 0) {
                 return res.status(404).json({ message: "No audios found." });
             }
 
-            // Mapping the result to include parsed integers and add the comment_count
             const result = rows.map(row => ({
                 ...row,
                 upvotes: parseInt(row.upvotes, 10),
                 downvotes: parseInt(row.downvotes, 10),
-                comment_count: parseInt(row.comment_count, 10), // Parse comment count to integer
+                comment_count: parseInt(row.comment_count, 10),
                 vote_type: row.user_vote_type,
+                bookmarked: row.bookmarked === "true" ? true : false
             }));
 
             console.log("result", result);
