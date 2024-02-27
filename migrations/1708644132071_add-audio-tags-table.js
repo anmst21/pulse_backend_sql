@@ -16,9 +16,10 @@ exports.up = pgm => {
 
 exports.down = pgm => {
     pgm.sql(`
-        DROP TABLE audio_tags;
+        DROP TABLE tags;
     `)
 };
+
 
 
 

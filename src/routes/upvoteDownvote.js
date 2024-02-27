@@ -7,6 +7,7 @@ module.exports = (app) => {
         const { post_id, vote_type } = req.body;
         const user_id = req.headers['userid'];
 
+
         try {
             const existingVoteResult = await pool.query(
                 'SELECT * FROM upvotes_downvotes WHERE user_id = $1 AND post_id = $2',

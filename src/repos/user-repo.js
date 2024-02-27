@@ -7,11 +7,9 @@ class UserRepo {
 
     static async insert(username, bio) {
         const { rows } = await pool.query('INSERT INTO users (username, bio) VALUES ($1, $2) RETURNING *;', [username, bio])
-        console.log(rows);
         return toCamelCase(rows)[0];
     }
     static async create(username, password, email) {
-        console.log("username, password, email", username, password, email)
         const saltRounds = 10; // Adjust saltRounds as needed
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
@@ -20,7 +18,6 @@ class UserRepo {
         const query = 'INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING *;';
         const { rows } = await pool.query(query, [username, hashedPassword, email]);
 
-        console.log(rows);
         return toCamelCase(rows)[0]; // Assuming toCamelCase is a function you've defined
     }
 
@@ -33,7 +30,6 @@ class UserRepo {
         const query = 'INSERT INTO users (email, password, username) VALUES ($1, $2, $3) RETURNING *;';
         const { rows } = await pool.query(query, [username, hashedPassword, email]);
 
-        console.log(rows);
         return toCamelCase(rows)[0]; // Assuming toCamelCase is a function you've defined
     }
 
@@ -64,7 +60,7 @@ class UserRepo {
         // Assuming toCamelCase converts row names to camelCase properties
         return toCamelCase(rows)[0];
     }
-    static async userData(userId) {
+    static async userData(userId, id) {
 
         const userQuery = await pool.query(
             'SELECT id, username, email, image_link, bio, link FROM users WHERE id = $1',
@@ -103,6 +99,39 @@ class UserRepo {
             'SELECT COUNT(*) FROM audios WHERE user_id = $1',
             [userId]
         );
+
+
+        if (userId !== id) {
+            // Query to determine follows and subscribed status
+            const relationQuery = await pool.query(
+                'SELECT follower_id, subscribed FROM followers WHERE leader_id = $1 AND follower_id = $2',
+                [id, userId]
+            );
+
+            const relation = relationQuery.rows[0];
+            console.log("relation", relation)
+            // Adding follows and subscribed properties based on the query result
+            user.follows = relation ? 'true' : 'false';
+            user.subscribed = relation ? relation.subscribed : 'false';
+        }
+        // `
+        //     SELECT
+        //       u.id,
+        //       u.email,
+        //       u.username,
+        //       u.image_link,
+        //       u.date_created,
+        //       CASE
+        //         WHEN f1.follower_id IS NOT NULL THEN 'true'
+        //         ELSE 'false'
+        //       END AS follows,
+        //       f1.subscribed
+        //     FROM
+        //       users u
+        //     LEFT JOIN followers f1 ON f1.leader_id = $1 AND f1.follower_id = u.id
+        //     ORDER BY
+        //       u.date_created DESC;
+        // `;
 
         // Adding followers and following counts to the user object
         user.followersCount = parseInt(followersCountQuery.rows[0].count);

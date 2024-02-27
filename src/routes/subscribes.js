@@ -16,7 +16,6 @@ module.exports = (app, io, userSockets) => {
                 `;
 
             await pool.query(updateQuery, [notificationId]);
-            console.log("acceptSubscriptionRequest", leaderId, followerId, notificationId, existingRequest);
             const query = 'SELECT * FROM users WHERE id = $1';
             const { rows } = await pool.query(query, [leaderId]);
 

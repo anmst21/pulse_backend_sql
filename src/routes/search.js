@@ -128,7 +128,6 @@ module.exports = (app) => {
     const searchQuery = req.body.searchQuery;
     const activeIds = req.body.activeIds.map(id => parseInt(id)).filter(id => !isNaN(id));;
     const userId = req.headers['userid'];
-    console.log("activeIds", activeIds)
     const query = `
         SELECT
           g.id,

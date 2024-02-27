@@ -48,7 +48,6 @@ module.exports = (app) => {
                 Key: keys.large,
             });
             await s3Client.send(deleteCommandLarge);
-            console.log("record deleted")
             res
                 .status(200)
                 .send({ message: "File and database record deleted successfully" });
@@ -63,7 +62,6 @@ module.exports = (app) => {
     app.post("/user/saveImageLink", async (req, res) => {
         try {
             const { imageLink, userId } = req.body;
-            console.log("imageLinkimageLinkimageLink", imageLink)
             // Check if the user exists
             const userQuery = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
 
@@ -98,7 +96,6 @@ module.exports = (app) => {
 
             let uuid = uuidv4();
             const key = `${userId}/${size}/${uuid}.png`; // Assuming PNG images
-            console.log("keykeykey", key)
             const command = new PutObjectCommand({
                 Bucket: "my-photo-bucket-111", // Assuming same bucket is used for images
                 Key: key,

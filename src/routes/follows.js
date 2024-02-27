@@ -19,7 +19,6 @@ module.exports = (app, io, userSockets) => {
 
             const query = 'SELECT * FROM users WHERE id = $1';
             const { rows } = await pool.query(query, [leaderId]);
-            console.log("user", rows[0].username)
 
             const targetSocketId = userSockets[followerId];
 

@@ -70,7 +70,6 @@ module.exports = (app) => {
                 "UPDATE users SET username = $1 WHERE id = $2 RETURNING username",
                 [username, id]
             );
-            console.log("updatedUserupdatedUserupdatedUser", updatedUser)
             if (updatedUser.rows.length > 0) {
                 res.json(updatedUser.rows[0].username);
             } else {
@@ -87,7 +86,6 @@ module.exports = (app) => {
         const { username, bio } = req.body;
 
         const user = await UserRepo.insert(username, bio)
-        console.log(user);
         res.send(user)
 
     })
@@ -98,7 +96,6 @@ module.exports = (app) => {
 
             const { userName, password, email } = req.body;
 
-            console.log("userName, password, email", userName, password, email)
             let user = await UserRepo.findByEmail(email)
             if (user) {
                 return res.status(400).json({ message: "User already registered." });
@@ -160,13 +157,14 @@ module.exports = (app) => {
     app.get('/user/:id', async (req, res) => {
         try {
             const userId = parseInt(req.params.id);
+            const id = req.headers['userid'];
 
             // Query to fetch the user details
 
             // If user not found
 
 
-            const userWithData = await UserRepo.userData(userId)
+            const userWithData = await UserRepo.userData(userId, id)
             if (userWithData === null) {
                 return res.status(404).json({ message: "User not found" });
             }

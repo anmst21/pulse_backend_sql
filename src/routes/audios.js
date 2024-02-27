@@ -7,6 +7,7 @@ const pool = require('../pool');
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { v4: uuidv4 } = require("uuid");
 const UserRepo = require('../repos/user-repo');
+const axios = require("axios")
 
 
 const s3Client = new S3Client({
@@ -21,39 +22,40 @@ const s3Client = new S3Client({
 
 module.exports = (app) => {
 
-    app.post("/audios/add-tags", async (req, res) => {
-        const { tagIds, audioId, userId } = req.body;
+    // app.post("/audios/add-tags", async (req, res) => {
+    //     const { tagIds, audioId, userId } = req.body;
+    //     // const userId = req.headers['userid'];
 
-        // Check if all parameters are present
-        if (!tagIds || !Array.isArray(tagIds) || tagIds.some(isNaN) || isNaN(audioId) || isNaN(userId)) {
-            return res.status(400).send('Invalid input');
-        }
+    //     // Check if all parameters are present
+    //     if (!tagIds || !Array.isArray(tagIds) || tagIds.some(isNaN) || isNaN(audioId) || isNaN(userId)) {
+    //         return res.status(400).send('Invalid input');
+    //     }
 
-        // Begin transaction
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
+    //     // Begin transaction
+    //     const client = await pool.connect();
+    //     try {
+    //         await client.query('BEGIN');
 
-            // Iterate over the tagIds and insert them with audioId
-            for (const genreId of tagIds) {
-                const insertQuery = `
-                INSERT INTO tags (audio_id, genre_id)
-                VALUES ($1, $2)
-                ON CONFLICT (audio_id, genre_id) DO NOTHING; // Assuming you want to ignore duplicate entries
-            `;
-                await client.query(insertQuery, [audioId, genreId]);
-            }
+    //         // Iterate over the tagIds and insert them with audioId
+    //         for (const genreId of tagIds) {
+    //             const insertQuery = `
+    //             INSERT INTO tags (audio_id, genre_id)
+    //             VALUES ($1, $2)
+    //             ON CONFLICT (audio_id, genre_id) DO NOTHING; // Assuming you want to ignore duplicate entries
+    //         `;
+    //             await client.query(insertQuery, [audioId, genreId]);
+    //         }
 
-            await client.query('COMMIT');
-            res.send('Tags added successfully');
-        } catch (error) {
-            await client.query('ROLLBACK');
-            console.error('Error adding tags', error);
-            res.status(500).send('Internal Server Error');
-        } finally {
-            client.release();
-        }
-    });
+    //         await client.query('COMMIT');
+    //         res.send('Tags added successfully');
+    //     } catch (error) {
+    //         await client.query('ROLLBACK');
+    //         console.error('Error adding tags', error);
+    //         res.status(500).send('Internal Server Error');
+    //     } finally {
+    //         client.release();
+    //     }
+    // });
 
     app.get('/audios', async (req, res) => {
         const userId = req.headers['userid'];
@@ -61,35 +63,38 @@ module.exports = (app) => {
         try {
             const query = `
                     SELECT
-                audios.*,
-                users.username,
-                (SELECT image_link FROM users WHERE users.id = audios.user_id) AS image_link,
-                COUNT(DISTINCT CASE WHEN general_upvotes_downvotes.vote_type = true THEN general_upvotes_downvotes.id END) AS upvotes,
-                COUNT(DISTINCT CASE WHEN general_upvotes_downvotes.vote_type = false THEN general_upvotes_downvotes.id END) AS downvotes,
-                COUNT(DISTINCT comments.id) AS comment_count,
-                user_vote.vote_type AS user_vote_type,
-                CASE
-                    WHEN followers.follower_id IS NOT NULL THEN 'true'
-                    ELSE 'false'
-                END AS follows,
-                followers.subscribed AS subscribed,
-                CASE
-                    WHEN bookmarks.id IS NOT NULL THEN 'true'
-                    ELSE 'false'
-                END AS bookmarked
-            FROM audios
-            JOIN users ON audios.user_id = users.id
-            LEFT JOIN upvotes_downvotes AS general_upvotes_downvotes ON audios.id = general_upvotes_downvotes.post_id
-            LEFT JOIN comments ON audios.id = comments.post_id
-            LEFT JOIN (
-                SELECT post_id, vote_type
-                FROM upvotes_downvotes
-                WHERE user_id = $1
-            ) AS user_vote ON audios.id = user_vote.post_id
-            LEFT JOIN followers ON followers.leader_id = $1 AND followers.follower_id = audios.user_id
-            LEFT JOIN bookmarks ON bookmarks.audio_id = audios.id AND bookmarks.user_id = $1
-            GROUP BY audios.id, users.username, user_vote.vote_type, followers.follower_id, followers.subscribed, bookmarks.id
-            ORDER BY audios.date_created DESC;
+                    audios.*,
+                    users.username,
+                    (SELECT image_link FROM users WHERE users.id = audios.user_id) AS image_link,
+                    COUNT(DISTINCT CASE WHEN general_upvotes_downvotes.vote_type = true THEN general_upvotes_downvotes.id END) AS upvotes,
+                    COUNT(DISTINCT CASE WHEN general_upvotes_downvotes.vote_type = false THEN general_upvotes_downvotes.id END) AS downvotes,
+                    COUNT(DISTINCT comments.id) AS comment_count,
+                    user_vote.vote_type AS user_vote_type,
+                    CASE
+                        WHEN followers.follower_id IS NOT NULL THEN 'true'
+                        ELSE 'false'
+                    END AS follows,
+                    followers.subscribed AS subscribed,
+                    CASE
+                        WHEN bookmarks.id IS NOT NULL THEN 'true'
+                        ELSE 'false'
+                    END AS bookmarked,
+                    location.district AS location -- Here we're selecting the district as location
+                FROM audios
+                JOIN users ON audios.user_id = users.id
+                LEFT JOIN upvotes_downvotes AS general_upvotes_downvotes ON audios.id = general_upvotes_downvotes.post_id
+                LEFT JOIN comments ON audios.id = comments.post_id
+                LEFT JOIN (
+                    SELECT post_id, vote_type
+                    FROM upvotes_downvotes
+                    WHERE user_id = $1
+                ) AS user_vote ON audios.id = user_vote.post_id
+                LEFT JOIN followers ON followers.leader_id = $1 AND followers.follower_id = audios.user_id
+                LEFT JOIN bookmarks ON bookmarks.audio_id = audios.id AND bookmarks.user_id = $1
+                LEFT JOIN location ON audios.id = location.audio_id -- This is the join with the location table
+                GROUP BY audios.id, users.username, user_vote.vote_type, followers.follower_id, followers.subscribed, bookmarks.id, location.district -- You need to add location.district to GROUP BY
+                ORDER BY audios.date_created DESC
+                LIMIT 15;
         `;
 
             const { rows } = await pool.query(query, [userId]);
@@ -98,18 +103,30 @@ module.exports = (app) => {
                 return res.status(404).json({ message: "No audios found." });
             }
 
-            const result = rows.map(row => ({
-                ...row,
-                upvotes: parseInt(row.upvotes, 10),
-                downvotes: parseInt(row.downvotes, 10),
-                comment_count: parseInt(row.comment_count, 10),
-                vote_type: row.user_vote_type,
-                bookmarked: row.bookmarked === "true" ? true : false
+            const enhancedRows = await Promise.all(rows.map(async (row) => {
+                const tagsQuery = `
+                SELECT genres.id, genres.name
+                FROM genres
+                JOIN tags ON tags.genre_id = genres.id
+                WHERE tags.audio_id = $1;
+            `;
+                const tagsResult = await pool.query(tagsQuery, [row.id]);
+                const tags = tagsResult.rows;
+
+                return {
+                    ...row,
+                    upvotes: parseInt(row.upvotes, 10),
+                    downvotes: parseInt(row.downvotes, 10),
+                    comment_count: parseInt(row.comment_count, 10),
+                    vote_type: row.user_vote_type,
+                    bookmarked: row.bookmarked === "true",
+                    tags // Append the fetched tags here
+                };
             }));
 
-            console.log("result", result);
 
-            res.json(result);
+
+            res.json(enhancedRows);
         } catch (error) {
             console.error("Error fetching audios:", error);
             res.status(500).send("Server error");
@@ -144,11 +161,9 @@ module.exports = (app) => {
             ORDER BY audios.date_created DESC;
         `;
             const { rows } = await pool.query(query, [userId]);
-            console.log("rowsrowsrows", rows);
             if (rows.length === 0) {
                 return res.status(404).json({ message: "No audios found." });
             }
-
             const result = rows.map(row => ({
                 ...row,
                 upvotes: parseInt(row.upvotes, 10),
@@ -157,7 +172,6 @@ module.exports = (app) => {
                 vote_type: row.user_vote_type
             }));
 
-            console.log("resultresultresult", result);
 
             res.json(result);
         } catch (error) {
@@ -260,6 +274,11 @@ module.exports = (app) => {
                 fileName,
                 extension,
                 track,
+                tagIds,
+                lat,
+                lng,
+                locName,
+                locDist
             } = req.body;
 
 
@@ -275,12 +294,50 @@ module.exports = (app) => {
             } else {
                 values = [audioLink, duration, user, bpm, size, JSON.stringify(soundLevels), type, fileName, extension, JSON.stringify({})]; // Assuming track isn't provided for non-Spotify links either
             }
-
             const { rows } = await pool.query(query, values);
             const savedAudio = rows[0];
-            console.log("savedAudiosavedAudiosavedAudio", savedAudio)
-            res.status(200).json(savedAudio);
+            // Now, for each tagId in tagIds, insert a new record into the tags table
+            const insertTagQuery = `
+                INSERT INTO tags (audio_id, genre_id)
+                VALUES ($1, $2)
+            `;
+
+            // Use Promise.all to execute all insert queries in parallel (or sequentially if preferred)
+            await Promise.all(tagIds.map(tagId =>
+                pool.query(insertTagQuery, [savedAudio.id, tagId])
+            ));
+
+
+            const genreDetailsQuery = `
+            SELECT g.* FROM genres g
+            JOIN tags t ON g.id = t.genre_id
+            WHERE t.audio_id = $1 AND t.genre_id = ANY($2::int[])
+        `;
+            const genresResult = await pool.query(genreDetailsQuery, [savedAudio.id, tagIds]);
+            const genres = genresResult.rows;
+
+            // Modify response to include genre details
+            const response = {
+                ...savedAudio,
+                tags: genres
+            };
+            if (lat && lng) {
+                const insertLocationQuery = `
+                INSERT INTO location (lat, lng, name, district, audio_id)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING district;
+            `;
+                const locationValues = [lat, lng, locName, locDist, savedAudio.id];
+                const locationResult = await pool.query(insertLocationQuery, locationValues);
+                const locationDistrict = locationResult.rows[0].district;
+
+                // Add location property to response object
+                response.location = locationDistrict;
+            }
+
+            res.status(200).json(response);
         } catch (error) {
+
             console.error("Error saving audio:", error);
             res.status(500).send("Server Error");
         }
