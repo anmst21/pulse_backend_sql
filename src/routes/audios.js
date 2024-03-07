@@ -21,80 +21,178 @@ const s3Client = new S3Client({
 
 
 module.exports = (app) => {
-
-    // app.post("/audios/add-tags", async (req, res) => {
-    //     const { tagIds, audioId, userId } = req.body;
-    //     // const userId = req.headers['userid'];
-
-    //     // Check if all parameters are present
-    //     if (!tagIds || !Array.isArray(tagIds) || tagIds.some(isNaN) || isNaN(audioId) || isNaN(userId)) {
-    //         return res.status(400).send('Invalid input');
-    //     }
-
-    //     // Begin transaction
-    //     const client = await pool.connect();
+    // app.post("/audios/img/save", async (req, res) => {
     //     try {
-    //         await client.query('BEGIN');
+    //         const { imageLink, userId } = req.body;
+    //         // Check if the user exists
+    //         const userQuery = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
 
-    //         // Iterate over the tagIds and insert them with audioId
-    //         for (const genreId of tagIds) {
-    //             const insertQuery = `
-    //             INSERT INTO tags (audio_id, genre_id)
-    //             VALUES ($1, $2)
-    //             ON CONFLICT (audio_id, genre_id) DO NOTHING; // Assuming you want to ignore duplicate entries
-    //         `;
-    //             await client.query(insertQuery, [audioId, genreId]);
+    //         if (userQuery.rows.length === 0) {
+    //             return res.status(404).json({ message: "User not found" });
     //         }
 
-    //         await client.query('COMMIT');
-    //         res.send('Tags added successfully');
+    //         let user = userQuery.rows[0];
+
+    //         // Update the existing image link
+    //         const updateQuery = await pool.query(
+    //             'UPDATE users SET image_link = $1 WHERE id = $2 RETURNING *',
+    //             [imageLink, userId]
+    //         );
+
+    //         user = updateQuery.rows[0];
+
+    //         res.status(200).json(user);
     //     } catch (error) {
-    //         await client.query('ROLLBACK');
-    //         console.error('Error adding tags', error);
-    //         res.status(500).send('Internal Server Error');
-    //     } finally {
-    //         client.release();
+    //         console.error("Error saving or updating image:", error);
+    //         res.status(500).send("Server Error");
     //     }
     // });
+    app.post("/audios/img/delete", async (req, res) => {
+        try {
+            const { keys } = req.body;
+
+            if (!keys) {
+                return res.status(400).send("No file keys provided");
+            }
+
+            const deleteCommandSmall = new DeleteObjectCommand({
+                Bucket: "post-photo-bucket",
+                Key: keys.small,
+            });
+            await s3Client.send(deleteCommandSmall);
+            const deleteCommandMedium = new DeleteObjectCommand({
+                Bucket: "post-photo-bucket",
+                Key: keys.medium,
+            });
+            await s3Client.send(deleteCommandMedium);
+            const deleteCommandLarge = new DeleteObjectCommand({
+                Bucket: "post-photo-bucket",
+                Key: keys.large,
+            });
+            await s3Client.send(deleteCommandLarge);
+            res
+                .status(200)
+                .send({ message: "File and database record deleted successfully" });
+        } catch (error) {
+            console.error("Error deleting file:", error);
+            res.status(500).send("Server Error");
+        }
+    });
+
+
+    app.post("/audios/img", async (req, res) => {
+        try {
+            const { size } = req.body;
+            const userId = req.headers['userid'];
+
+            if (!userId) {
+                return res.status(400).send("No userId provided in headers");
+            }
+
+            let uuid = uuidv4();
+            const key = `${userId}/${size}/${uuid}.png`;
+            const command = new PutObjectCommand({
+                Bucket: "post-photo-bucket",
+                Key: key,
+                ContentType: "image/jpeg",
+            });
+
+            const signedUrl = await getSignedUrl(s3Client, command, {
+                expiresIn: 3600,
+            });
+            console.log({ key, url: signedUrl })
+            res.send({ key, url: signedUrl });
+        } catch (err) {
+            console.error(err);
+            res.status(500).send("Failed to generate signed URL");
+        }
+    });
+
+    app.post('/audios/seen', async (req, res) => {
+        const { audioId } = req.body;
+        const userId = req.headers['userid'];
+
+        try {
+            // Check if the seen record already exists
+            const existingSeenResult = await pool.query(
+                'SELECT * FROM post_seen WHERE user_id = $1 AND audio_id = $2',
+                [userId, audioId]
+            );
+            const existingSeen = existingSeenResult.rows[0];
+
+            if (!existingSeen) {
+                // Record doesn't exist, add a new seen record
+                await pool.query(
+                    'INSERT INTO post_seen (user_id, audio_id) VALUES ($1, $2)',
+                    [userId, audioId]
+                );
+                res.json({ message: 'Seen record added.', action: 'seen' });
+            } else {
+                // Record exists, optionally handle this scenario, e.g., update the seen_at timestamp or simply return a message
+                // For this example, we'll just return a message indicating the audio has already been marked as seen
+                res.json({ message: 'Audio has already been seen by this user.', action: 'already_seen' });
+            }
+        } catch (err) {
+            console.error('Error handling the seen action', err);
+            res.status(500).json({ message: 'Internal server error' });
+        }
+    });
+
 
     app.get('/audios', async (req, res) => {
         const userId = req.headers['userid'];
 
         try {
             const query = `
-                    SELECT
-                    audios.*,
-                    users.username,
-                    (SELECT image_link FROM users WHERE users.id = audios.user_id) AS image_link,
-                    COUNT(DISTINCT CASE WHEN general_upvotes_downvotes.vote_type = true THEN general_upvotes_downvotes.id END) AS upvotes,
-                    COUNT(DISTINCT CASE WHEN general_upvotes_downvotes.vote_type = false THEN general_upvotes_downvotes.id END) AS downvotes,
-                    COUNT(DISTINCT comments.id) AS comment_count,
-                    user_vote.vote_type AS user_vote_type,
-                    CASE
-                        WHEN followers.follower_id IS NOT NULL THEN 'true'
-                        ELSE 'false'
-                    END AS follows,
-                    followers.subscribed AS subscribed,
-                    CASE
-                        WHEN bookmarks.id IS NOT NULL THEN 'true'
-                        ELSE 'false'
-                    END AS bookmarked,
-                    location.district AS location -- Here we're selecting the district as location
-                FROM audios
-                JOIN users ON audios.user_id = users.id
-                LEFT JOIN upvotes_downvotes AS general_upvotes_downvotes ON audios.id = general_upvotes_downvotes.post_id
-                LEFT JOIN comments ON audios.id = comments.post_id
-                LEFT JOIN (
-                    SELECT post_id, vote_type
-                    FROM upvotes_downvotes
-                    WHERE user_id = $1
-                ) AS user_vote ON audios.id = user_vote.post_id
-                LEFT JOIN followers ON followers.leader_id = $1 AND followers.follower_id = audios.user_id
-                LEFT JOIN bookmarks ON bookmarks.audio_id = audios.id AND bookmarks.user_id = $1
-                LEFT JOIN location ON audios.id = location.audio_id -- This is the join with the location table
-                GROUP BY audios.id, users.username, user_vote.vote_type, followers.follower_id, followers.subscribed, bookmarks.id, location.district -- You need to add location.district to GROUP BY
-                ORDER BY audios.date_created DESC
-                LIMIT 15;
+            SELECT
+                audios.*,
+                users.username,
+                (SELECT image_link FROM users WHERE users.id = audios.user_id) AS image_link,
+                COUNT(DISTINCT CASE WHEN general_upvotes_downvotes.vote_type = true THEN general_upvotes_downvotes.id END) AS upvotes,
+                COUNT(DISTINCT CASE WHEN general_upvotes_downvotes.vote_type = false THEN general_upvotes_downvotes.id END) AS downvotes,
+                COUNT(DISTINCT CASE WHEN comments.parent_id IS NULL THEN comments.id END) AS comment_count,
+                user_vote.vote_type AS user_vote_type,
+                CASE
+                    WHEN followers.follower_id IS NOT NULL THEN 'true'
+                    ELSE 'false'
+                END AS follows,
+                followers.subscribed AS subscribed,
+                CASE
+                    WHEN bookmarks.id IS NOT NULL THEN 'true'
+                    ELSE 'false'
+                END AS bookmarked,
+                location.district AS location,
+                COALESCE(ps.seen_count, 0) AS seen, -- Count of all seen records for the post
+                CASE
+                    WHEN ps_user.is_seen IS NOT NULL THEN true
+                    ELSE false
+                END AS isSeen -- Whether the current user has seen the post
+            FROM audios
+            JOIN users ON audios.user_id = users.id
+            LEFT JOIN upvotes_downvotes AS general_upvotes_downvotes ON audios.id = general_upvotes_downvotes.post_id
+            LEFT JOIN comments ON audios.id = comments.post_id
+            LEFT JOIN (
+                SELECT post_id, vote_type
+                FROM upvotes_downvotes
+                WHERE user_id = $1
+            ) AS user_vote ON audios.id = user_vote.post_id
+            LEFT JOIN followers ON followers.leader_id = $1 AND followers.follower_id = audios.user_id
+            LEFT JOIN bookmarks ON bookmarks.audio_id = audios.id AND bookmarks.user_id = $1
+            LEFT JOIN location ON audios.id = location.audio_id
+            LEFT JOIN (
+                SELECT audio_id, COUNT(*) AS seen_count
+                FROM post_seen
+                GROUP BY audio_id
+            ) AS ps ON audios.id = ps.audio_id
+            LEFT JOIN (
+                SELECT audio_id, true AS is_seen
+                FROM post_seen
+                WHERE user_id = $1
+                GROUP BY audio_id
+            ) AS ps_user ON audios.id = ps_user.audio_id
+            GROUP BY audios.id, users.username, user_vote.vote_type, followers.follower_id, followers.subscribed, bookmarks.id, location.district, ps.seen_count, ps_user.is_seen
+            ORDER BY audios.date_created DESC
+            LIMIT 10;
         `;
 
             const { rows } = await pool.query(query, [userId]);
@@ -120,15 +218,15 @@ module.exports = (app) => {
                     comment_count: parseInt(row.comment_count, 10),
                     vote_type: row.user_vote_type,
                     bookmarked: row.bookmarked === "true",
-                    tags // Append the fetched tags here
+                    tags, // Append the fetched tags here
+                    isSeen: row.isseen, // Add isSeen property
+                    seen: parseInt(row.seen, 10) // Add seen property
                 };
             }));
 
-
-
             res.json(enhancedRows);
         } catch (error) {
-            console.error("Error fetching audios:", error);
+            console.error("Error fetching audios:", error)
             res.status(500).send("Server error");
         }
     });
@@ -136,7 +234,7 @@ module.exports = (app) => {
 
     app.get('/user/:userId/audios', async (req, res) => {
         try {
-            const userId = req.headers['userid'];
+            const userId = req.params.userId;
 
             const query = `
             SELECT
@@ -278,21 +376,22 @@ module.exports = (app) => {
                 lat,
                 lng,
                 locName,
-                locDist
+                locDist,
+                img
             } = req.body;
 
-
+            console.log("oiiiiii", img)
             let query = `
-            INSERT INTO audios (audio_link, duration, user_id, bpm, size, sound_levels, type, file_name, extension, track)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO audios (audio_link, duration, user_id, bpm, size, sound_levels, type, file_name, extension, track, img)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING *;
         `;
             let values;
 
             if (type === "spotify") {
-                values = [audioLink, duration, user, bpm, null, null, type, null, null, JSON.stringify(track)]; // Assuming track isn't provided for Spotify links
+                values = [audioLink, duration, user, bpm, null, null, type, null, null, JSON.stringify(track), JSON.stringify(img)];
             } else {
-                values = [audioLink, duration, user, bpm, size, JSON.stringify(soundLevels), type, fileName, extension, JSON.stringify({})]; // Assuming track isn't provided for non-Spotify links either
+                values = [audioLink, duration, user, bpm, size, JSON.stringify(soundLevels), type, fileName, extension, JSON.stringify({}), JSON.stringify(img)]; // Assuming track isn't provided for non-Spotify links either
             }
             const { rows } = await pool.query(query, values);
             const savedAudio = rows[0];

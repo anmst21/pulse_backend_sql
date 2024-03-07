@@ -17,7 +17,8 @@ exports.up = pgm => {
             extension TEXT,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             type VARCHAR(255) NOT NULL CHECK (type IN ('spotify', 'file', 'recording')),
-            FOREIGN KEY (user_id) REFERENCES users(id) -- Assuming a 'users' table exists
+            FOREIGN KEY (user_id) REFERENCES users(id) -- Assuming a 'users' table exists,
+            img JSONB DEFAULT NULL
         );
     `)
 };

@@ -4,18 +4,26 @@ const pool = require('../pool');
 module.exports = (app) => {
 
     app.post('/comments', async (req, res) => {
-        const { contents, user_id, post_id } = req.body;
+        const { contents, user_id, post_id, parent_id } = req.body;
 
         if (!contents || !user_id || !post_id) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
-
+        console.log("parent", contents, user_id, post_id, parent_id)
         try {
             // Step 1: Insert the comment
-            const insertResult = await pool.query(
-                'INSERT INTO comments (contents, user_id, post_id) VALUES ($1, $2, $3) RETURNING *;',
-                [contents, user_id, post_id]
-            );
+            let insertResult
+            if (!parent_id) {
+                insertResult = await pool.query(
+                    'INSERT INTO comments (contents, user_id, post_id) VALUES ($1, $2, $3) RETURNING *;',
+                    [contents, user_id, post_id]
+                );
+            } else {
+                insertResult = await pool.query(
+                    'INSERT INTO comments (contents, user_id, parent_id) VALUES ($1, $2, $3) RETURNING *;',
+                    [contents, user_id, parent_id]
+                );
+            }
 
             const newComment = insertResult.rows[0];
 
@@ -39,6 +47,7 @@ module.exports = (app) => {
                 liked: false,
                 likes_count: 0
             };
+            console.log("resss", response)
 
             // Respond with the inserted comment and user details
             res.status(201).json(response);
@@ -49,19 +58,29 @@ module.exports = (app) => {
     });
 
 
+
     app.get('/comments/:postId/:userId', async (req, res) => {
         const { postId, userId } = req.params;
 
         try {
             const query = `
-        SELECT comments.id, comments.contents, comments.created_at, comments.updated_at, comments.post_id, comments.user_id,
-               users.username, users.image_link,
-               (SELECT COUNT(*) FROM comment_likes WHERE comment_likes.comment_id = comments.id) AS likes_count,
-               EXISTS(SELECT 1 FROM comment_likes WHERE comment_likes.comment_id = comments.id AND comment_likes.user_id = $2) AS liked
-        FROM comments
-        JOIN users ON comments.user_id = users.id
-        WHERE comments.post_id = $1
-        ORDER BY comments.created_at DESC;
+           SELECT
+    comments.id,
+    comments.contents,
+    comments.created_at,
+    comments.updated_at,
+    comments.post_id,
+    comments.user_id,
+    comments.parent_id,
+    users.username,
+    users.image_link,
+    (SELECT COUNT(*) FROM comment_likes WHERE comment_likes.comment_id = comments.id) AS likes_count,
+    EXISTS(SELECT 1 FROM comment_likes WHERE comment_likes.comment_id = comments.id AND comment_likes.user_id = $2) AS liked,
+    (SELECT COUNT(*) FROM comments AS replies WHERE replies.parent_id = comments.id) AS replies_count -- Count of replies for each comment
+FROM comments
+JOIN users ON comments.user_id = users.id
+WHERE comments.post_id = $1 AND comments.parent_id IS NULL
+ORDER BY comments.created_at DESC;
         `;
             const { rows } = await pool.query(query, [postId, userId]);
 
@@ -75,6 +94,38 @@ module.exports = (app) => {
             });
         } catch (error) {
             console.error('Error fetching comments:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Internal server error',
+            });
+        }
+    });
+    app.get('/replies/:commentId/:userId', async (req, res) => {
+        const { commentId, userId } = req.params;
+
+        try {
+            const query = `
+            SELECT comments.id, comments.contents, comments.created_at, comments.updated_at, comments.post_id, comments.user_id, comments.parent_id,
+                   users.username, users.image_link,
+                   (SELECT COUNT(*) FROM comment_likes WHERE comment_likes.comment_id = comments.id) AS likes_count,
+                   EXISTS(SELECT 1 FROM comment_likes WHERE comment_likes.comment_id = comments.id AND comment_likes.user_id = $2) AS liked
+            FROM comments
+            JOIN users ON comments.user_id = users.id
+            WHERE comments.parent_id = $1
+            ORDER BY comments.created_at DESC;
+        `;
+            const { rows } = await pool.query(query, [commentId, userId]);
+
+            res.json({
+                success: true,
+                replies: rows.map(row => ({
+                    ...row,
+                    liked: row.liked === true,
+                    likes_count: parseInt(row.likes_count),
+                })),
+            });
+        } catch (error) {
+            console.error('Error fetching replies:', error);
             res.status(500).json({
                 success: false,
                 message: 'Internal server error',
