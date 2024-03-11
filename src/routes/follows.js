@@ -5,6 +5,7 @@ module.exports = (app, io, userSockets) => {
     app.post('/user/follow', async (req, res) => {
         try {
             const { leaderId, followerId } = req.body; // IDs of the users involved in the follow action
+            console.log("ids", leaderId, followerId)
             // Check if the follower relationship already exists
             const existingFollow = await pool.query('SELECT id FROM followers WHERE leader_id = $1 AND follower_id = $2', [leaderId, followerId]);
             if (existingFollow.rows.length > 0) {
@@ -12,21 +13,21 @@ module.exports = (app, io, userSockets) => {
             }
             await pool.query('INSERT INTO followers (leader_id, follower_id) VALUES ($1, $2)', [leaderId, followerId]);
             // Insert the new follower relationship
-            await pool.query(`
-                INSERT INTO notifications (to_user_id, from_user_id, type)
-                VALUES ($1, $2, $3)
-            `, [followerId, leaderId, 'follow']);
+            // await pool.query(`
+            //     INSERT INTO notifications (to_user_id, from_user_id, type)
+            //     VALUES ($1, $2, $3)
+            // `, [followerId, leaderId, 'follow']);
 
-            const query = 'SELECT * FROM users WHERE id = $1';
-            const { rows } = await pool.query(query, [leaderId]);
+            // const query = 'SELECT * FROM users WHERE id = $1';
+            // const { rows } = await pool.query(query, [leaderId]);
 
-            const targetSocketId = userSockets[followerId];
+            // const targetSocketId = userSockets[followerId];
 
-            if (targetSocketId) {
-                io.to(targetSocketId).emit("notification", {
-                    message: `User  ${rows[0].username} is now following you`,
-                });
-            }
+            // if (targetSocketId) {
+            //     io.to(targetSocketId).emit("notification", {
+            //         message: `User  ${rows[0].username} is now following you`,
+            //     });
+            // }
             //${updatedUser.userName}
 
             res.status(200).json({ message: "Followed successfully" });
@@ -84,26 +85,29 @@ module.exports = (app, io, userSockets) => {
         try {
             const userId = parseInt(req.params.id);
 
-            // Query to fetch the list of users the specified user is following
+            // Adjusted query to avoid using 'false' with ENUM and handle no relationship with NULL
             const followingQuery = await pool.query(
                 `SELECT
-                    u.id,
-                    u.email,
-                    u.username,
-                    u.image_link,
-                    u.date_created,
-                    CASE
-                        WHEN f2.leader_id IS NOT NULL THEN 'true'
-                        ELSE 'false'
-                    END AS follows,
-                    f2.subscribed
-                FROM followers f
-                INNER JOIN users u ON f.follower_id = u.id
-                LEFT JOIN followers f2 ON f2.follower_id = u.id AND f2.leader_id = $1
-                WHERE f.leader_id = $1
-                ORDER BY f.created_at DESC;`,
+                u.id,
+                u.email,
+                u.username,
+                u.image_link,
+                u.date_created,
+                f2.status
+            FROM followers f
+            INNER JOIN users u ON f.follower_id = u.id
+            LEFT JOIN followers f2 ON f2.follower_id = u.id AND f2.leader_id = $1
+            WHERE f.leader_id = $1 
+            ORDER BY f.created_at DESC
+            `,
                 [userId]
             );
+
+            // You might need to adjust your application logic to handle NULL as 'false'
+            const rows = followingQuery.rows.map(row => ({
+                ...row,
+                status: row.follower_status || 'false' // or use any string that fits your application logic but make sure it's not conflicting with ENUM values
+            }));
 
             res.json(followingQuery.rows);
         } catch (error) {
@@ -117,30 +121,29 @@ module.exports = (app, io, userSockets) => {
             const userId = parseInt(req.params.id);
             const followersQuery = await pool.query(
                 `SELECT
-                    u.id,
-                    u.email,
-                    u.username,
-                    u.image_link,
-                    f2.created_at,
-                    CASE
-                        WHEN f2.leader_id IS NOT NULL THEN 'true'
-                        ELSE 'false'
-                    END AS follows,
-                    f2.subscribed
-                FROM followers f
-                INNER JOIN users u ON f.leader_id = u.id
-                LEFT JOIN followers f2 ON f2.follower_id = u.id AND f2.leader_id = $1
-                WHERE f.follower_id = $1
-             ORDER BY f.created_at DESC;`,
+                u.id,
+                u.email,
+                u.username,
+                u.image_link,
+                f.created_at,
+                f2.status
+            FROM followers f
+            INNER JOIN users u ON f.leader_id = u.id
+            LEFT JOIN followers f2 ON f2.leader_id = u.id AND f2.follower_id = $1
+            WHERE f.follower_id = $1
+            ORDER BY f.created_at DESC
+            LIMIT 15
+            `,
                 [userId]
             );
+
 
             res.json(followersQuery.rows);
         } catch (error) {
             console.error(error);
             res.status(500).send('Server error');
         }
-    })
+    });
 
 
 

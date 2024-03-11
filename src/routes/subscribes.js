@@ -8,7 +8,7 @@ module.exports = (app, io, userSockets) => {
 
 
             // Check if there's a pending subscription request
-            const existingRequest = await pool.query('SELECT id FROM followers WHERE leader_id = $2 AND follower_id = $1 AND subscribed = $3', [leaderId, followerId, 'pending']);
+            const existingRequest = await pool.query('SELECT id FROM followers WHERE leader_id = $1 AND follower_id = $2 AND status = $3', [leaderId, followerId, 'pending']);
             const updateQuery = `
                     UPDATE notifications 
                     SET seen = true 
@@ -19,16 +19,16 @@ module.exports = (app, io, userSockets) => {
             const query = 'SELECT * FROM users WHERE id = $1';
             const { rows } = await pool.query(query, [leaderId]);
 
-            const targetSocketId = userSockets[followerId];
-            if (targetSocketId) {
-                io.to(targetSocketId).emit("notification", {
-                    message: `User ${rows[0].username} has accepted your subscription request`,
-                });
-            }
+            // const targetSocketId = userSockets[followerId];
+            // if (targetSocketId) {
+            //     io.to(targetSocketId).emit("notification", {
+            //         message: `User ${rows[0].username} has accepted your subscription request`,
+            //     });
+            // }
 
             if (existingRequest.rows.length > 0) {
                 // Update the subscribed field to true
-                await pool.query('UPDATE followers SET subscribed = $1 WHERE leader_id = $3 AND follower_id = $2', [true, leaderId, followerId]);
+                await pool.query('UPDATE followers SET status = $1 WHERE leader_id = $2 AND follower_id = $3', ["accepted", leaderId, followerId]);
                 res.status(200).json({ message: "Subscription request accepted" });
             } else {
                 res.status(400).json({ message: "No pending subscription request found." });
@@ -69,7 +69,7 @@ module.exports = (app, io, userSockets) => {
             const { leaderId, followerId, notificationId } = req.body;
 
             // Check if there's a pending subscription request
-            const existingRequest = await pool.query('SELECT id FROM followers WHERE leader_id = $2 AND follower_id = $1 AND subscribed = $3', [leaderId, followerId, 'pending']);
+            const existingRequest = await pool.query('SELECT id FROM followers WHERE leader_id = $1 AND follower_id = $2 AND status = $3', [leaderId, followerId, 'pending']);
             const updateQuery = `
                     UPDATE notifications 
                     SET seen = true 
@@ -80,7 +80,7 @@ module.exports = (app, io, userSockets) => {
 
             if (existingRequest.rows.length > 0) {
                 // Update the subscribed field to 'declined'
-                await pool.query('UPDATE followers SET subscribed = $1 WHERE leader_id = $2 AND follower_id = $3', ['declined', leaderId, followerId]);
+                await pool.query('UPDATE followers SET status = $1 WHERE leader_id = $2 AND follower_id = $3', ['declined', leaderId, followerId]);
                 res.status(200).json({ message: "Subscription request declined" });
             } else {
                 res.status(400).json({ message: "No pending subscription request found." });
@@ -99,7 +99,7 @@ module.exports = (app, io, userSockets) => {
 
             if (existingFollow.rows.length > 0) {
                 // Update the subscribed field to true
-                await pool.query('UPDATE followers SET subscribed = $1 WHERE leader_id = $2 AND follower_id = $3', ["pending", leaderId, followerId]);
+                await pool.query('UPDATE followers SET status = $1 WHERE leader_id = $2 AND follower_id = $3', ["pending", leaderId, followerId]);
                 res.status(200).json({ message: "Request sent" });
             } else {
                 res.status(400).json({ message: "Follower relationship does not exist." });
@@ -136,7 +136,7 @@ module.exports = (app, io, userSockets) => {
 
             if (existingFollow.rows.length > 0) {
                 // Update the subscribed field to the string value 'false' (matching the enum type)
-                await pool.query('UPDATE followers SET subscribed = $1 WHERE leader_id = $2 AND follower_id = $3', ['false', leaderId, followerId]);
+                await pool.query('UPDATE followers SET status = $1 WHERE leader_id = $2 AND follower_id = $3', ['follows', leaderId, followerId]);
                 res.status(200).json({ message: "Unsubscribed successfully" });
             } else {
                 res.status(400).json({ message: "Follower relationship does not exist." });
@@ -154,38 +154,19 @@ module.exports = (app, io, userSockets) => {
 
             const subscribersQuery = await pool.query(
                 `SELECT
-                    u.id,
-                    u.email,
-                    u.username,
-                    u.image_link,
-                    f2.created_at,
-                    CASE
-                        WHEN f2.leader_id IS NOT NULL THEN 'true'
-                        ELSE 'false'
-                    END AS follows,
-                    f2.subscribed
-                FROM followers f
-                INNER JOIN users u ON f.leader_id = u.id
-                LEFT JOIN followers f2 ON f2.follower_id = u.id AND f2.leader_id = $1
-                WHERE f.follower_id = $1 AND f.subscribed = 'true'
-                ORDER BY f.created_at DESC;`,
+                u.id,
+                u.email,
+                u.username,
+                u.image_link,
+                f.created_at,
+                f.status 
+            FROM followers f
+            INNER JOIN users u ON f.leader_id = u.id
+            WHERE f.follower_id = $1 AND f.status = 'accepted'
+            ORDER BY f.created_at DESC
+            LIMIT 15
+            ;`,
                 [userId]
-                //     SELECT
-                //         u.id,
-                //     u.email,
-                //     u.username,
-                //     u.image_link,
-                //     f2.created_at,
-                //     CASE
-                //             WHEN f2.leader_id IS NOT NULL THEN 'true'
-                //             ELSE 'false'
-                //         END AS follows,
-                //     f2.subscribed
-                //     FROM followers f
-                //     INNER JOIN users u ON f.leader_id = u.id
-                //     LEFT JOIN followers f2 ON f2.follower_id = u.id AND f2.leader_id = $1
-                //     WHERE f.follower_id = $1
-                //  ORDER BY f.created_at DESC;
             );
 
             res.json(subscribersQuery.rows);
@@ -201,21 +182,18 @@ module.exports = (app, io, userSockets) => {
 
             const subscriptionsQuery = await pool.query(
                 `SELECT
-                    u.id,
-                    u.email,
-                    u.username,
-                    u.image_link,
-                    f.created_at,
-                    CASE
-                        WHEN f2.leader_id IS NOT NULL THEN 'true'
-                        ELSE 'false'
-                    END AS follows,
-                    f2.subscribed
-                FROM followers f
-                INNER JOIN users u ON f.follower_id = u.id
-                LEFT JOIN followers f2 ON f2.follower_id = u.id AND f2.leader_id = $1
-                WHERE f.leader_id = $1 AND f.subscribed = 'true'
-                ORDER BY f.created_at DESC;`,
+                u.id,
+                u.email,
+                u.username,
+                u.image_link,
+                f.created_at,
+                f.status AS status
+            FROM followers f
+            INNER JOIN users u ON f.follower_id = u.id
+            WHERE f.leader_id = $1 AND f.status = 'accepted'
+            ORDER BY f.created_at DESC
+            LIMIT 15
+            ;`,
                 [userId]
             );
 

@@ -61,7 +61,6 @@ class UserRepo {
         return toCamelCase(rows)[0];
     }
     static async userData(userId, id) {
-
         const userQuery = await pool.query(
             'SELECT id, username, email, image_link, bio, link FROM users WHERE id = $1',
             [userId]
@@ -72,26 +71,27 @@ class UserRepo {
         if (!user) {
             return null;
         }
+
+        // Count of people the user is following (leader)
         const followingCountQuery = await pool.query(
-            'SELECT COUNT(*) FROM followers WHERE leader_id = $1',
+            `SELECT COUNT(*) FROM followers WHERE leader_id = $1 AND status IN ('follows', 'accepted', 'pending')`,
             [userId]
         );
 
-
-
-        // Query to count the number of following
+        // Count of followers (follower)
         const followersCountQuery = await pool.query(
-            'SELECT COUNT(*) FROM followers WHERE follower_id = $1',
+            `SELECT COUNT(*) FROM followers WHERE follower_id = $1 AND status IN ('follows', 'accepted', 'pending')`,
             [userId]
         );
-
+        // Assuming subscriptions are now based on a specific status, for example 'accepted'
         const subscriptionsCountQuery = await pool.query(
-            'SELECT COUNT(*) FROM followers WHERE leader_id = $1 AND subscribed = \'true\'',
+            'SELECT COUNT(*) FROM followers WHERE leader_id = $1 AND status = \'accepted\'',
             [userId]
         );
 
+        // Assuming 'subscribers' are followers with 'accepted' status
         const subscribersCountQuery = await pool.query(
-            'SELECT COUNT(*) FROM followers WHERE follower_id = $1 AND subscribed = \'true\'',
+            'SELECT COUNT(*) FROM followers WHERE follower_id = $1 AND status = \'accepted\'',
             [userId]
         );
 
@@ -100,38 +100,20 @@ class UserRepo {
             [userId]
         );
 
-
         if (userId !== id) {
-            // Query to determine follows and subscribed status
             const relationQuery = await pool.query(
-                'SELECT follower_id, subscribed FROM followers WHERE leader_id = $1 AND follower_id = $2',
+                'SELECT follower_id, status FROM followers WHERE leader_id = $1 AND follower_id = $2',
                 [id, userId]
             );
 
             const relation = relationQuery.rows[0];
-            console.log("relation", relation)
-            // Adding follows and subscribed properties based on the query result
-            user.follows = relation ? 'true' : 'false';
-            user.subscribed = relation ? relation.subscribed : 'false';
+
+            // Adjusted to return "false" if no relation is found
+            user.status = relation ? relation.status : 'false'; // Provides the specific status if a relation exists, otherwise "false"
+        } else {
+            // If checking own profile, there's inherently no "following" or "follower status" to self
+            user.status = 'false';
         }
-        // `
-        //     SELECT
-        //       u.id,
-        //       u.email,
-        //       u.username,
-        //       u.image_link,
-        //       u.date_created,
-        //       CASE
-        //         WHEN f1.follower_id IS NOT NULL THEN 'true'
-        //         ELSE 'false'
-        //       END AS follows,
-        //       f1.subscribed
-        //     FROM
-        //       users u
-        //     LEFT JOIN followers f1 ON f1.leader_id = $1 AND f1.follower_id = u.id
-        //     ORDER BY
-        //       u.date_created DESC;
-        // `;
 
         // Adding followers and following counts to the user object
         user.followersCount = parseInt(followersCountQuery.rows[0].count);
@@ -139,6 +121,7 @@ class UserRepo {
         user.subscribersCount = parseInt(subscribersCountQuery.rows[0].count);
         user.subscriptionsCount = parseInt(subscriptionsCountQuery.rows[0].count);
         user.postsCount = parseInt(postsCountQuery.rows[0].count);
+
         return user;
     }
 

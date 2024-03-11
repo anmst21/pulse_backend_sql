@@ -9,6 +9,8 @@ CREATE TABLE post_reports (
     audio_id INTEGER NOT NULL,
     reporter_user_id INTEGER NOT NULL,
     owner_user_id INTEGER NOT NULL,
+    report_reason TEXT NOT NULL,
+    report_details TEXT NOT NULL,
     date_created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (audio_id) REFERENCES audios(id) ON DELETE CASCADE,
     FOREIGN KEY (reporter_user_id) REFERENCES users(id) ON DELETE CASCADE,

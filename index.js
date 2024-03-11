@@ -56,6 +56,7 @@ require("./src/routes/comments.js")(app);
 require("./src/routes/upvoteDownvote.js")(app);
 require("./src/routes/bookmarks.js")(app);
 require("./src/routes/reports.js")(app);
+require("./src/routes/bans.js")(app);
 
 
 pool.connect({

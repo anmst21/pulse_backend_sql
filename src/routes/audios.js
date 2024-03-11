@@ -152,11 +152,7 @@ module.exports = (app) => {
                 COUNT(DISTINCT CASE WHEN general_upvotes_downvotes.vote_type = false THEN general_upvotes_downvotes.id END) AS downvotes,
                 COUNT(DISTINCT CASE WHEN comments.parent_id IS NULL THEN comments.id END) AS comment_count,
                 user_vote.vote_type AS user_vote_type,
-                CASE
-                    WHEN followers.follower_id IS NOT NULL THEN 'true'
-                    ELSE 'false'
-                END AS follows,
-                followers.subscribed AS subscribed,
+                followers.status,
                 CASE
                     WHEN bookmarks.id IS NOT NULL THEN 'true'
                     ELSE 'false'
@@ -190,7 +186,7 @@ module.exports = (app) => {
                 WHERE user_id = $1
                 GROUP BY audio_id
             ) AS ps_user ON audios.id = ps_user.audio_id
-            GROUP BY audios.id, users.username, user_vote.vote_type, followers.follower_id, followers.subscribed, bookmarks.id, location.district, ps.seen_count, ps_user.is_seen
+            GROUP BY audios.id, users.username, user_vote.vote_type, followers.follower_id,followers.status, bookmarks.id, location.district, ps.seen_count, ps_user.is_seen
             ORDER BY audios.date_created DESC
             LIMIT 10;
         `;
@@ -220,7 +216,10 @@ module.exports = (app) => {
                     bookmarked: row.bookmarked === "true",
                     tags, // Append the fetched tags here
                     isSeen: row.isseen, // Add isSeen property
-                    seen: parseInt(row.seen, 10) // Add seen property
+                    seen: parseInt(row.seen, 10), // Add seen property
+                    openComments: false,
+                    status: row.status || 'false'
+
                 };
             }));
 

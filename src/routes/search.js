@@ -203,27 +203,29 @@ module.exports = (app) => {
           u.username,
           u.image_link,
           u.date_created,
-          CASE
-            WHEN f1.follower_id IS NOT NULL THEN 'true'
-            ELSE 'false'
-          END AS follows,
-          f1.subscribed
+          f1.status
         FROM
           users u
         LEFT JOIN followers f1 ON f1.leader_id = $1  AND f1.follower_id = u.id
         WHERE
           u.username ILIKE $2 -- Use ILIKE for case-insensitive search and '%' for partial matches
         ORDER BY
-          u.date_created DESC;
+          u.date_created DESC
+          LIMIT 10
+          ;
     `;
 
     try {
       // Use '%' wildcards to match any profiles that contain the searchQuery
       const searchPattern = `%${searchQuery}%`;
       const { rows } = await pool.query(query, [loggedInUserId, searchPattern]);
-
+      const modifiedRows = rows.map(row => ({
+        ...row,
+        // Convert NULL status to 'false' for the application's logic
+        status: row.status || 'false'
+      }));
       // Send the results back to the client
-      res.json(rows);
+      res.json(modifiedRows);
     } catch (error) {
       console.error('Error executing query', error.stack);
       res.status(500).send('Internal Server Error');
@@ -231,34 +233,36 @@ module.exports = (app) => {
   });
   app.get("/search/fetchInitialProfiles", async (req, res) => {
     const loggedInUserId = req.query.loggedInUserId;
+    if (!loggedInUserId) {
+      return res.status(400).send("Logged in user ID is required");
+    }
+
     const query = `
-            SELECT
-              u.id,
-              u.email,
-              u.username,
-              u.image_link,
-              u.date_created,
-              CASE
-                WHEN f1.follower_id IS NOT NULL THEN 'true'
-                ELSE 'false'
-              END AS follows,
-              f1.subscribed
-            FROM
-              users u
-            LEFT JOIN followers f1 ON f1.leader_id = $1 AND f1.follower_id = u.id
-            ORDER BY
-              u.date_created DESC;
-        `;
+          SELECT
+            u.id,
+            u.email,
+            u.username,
+            u.image_link,
+            u.date_created,
+            f1.status
+          FROM
+            users u
+          LEFT JOIN followers f1 ON f1.leader_id = $1 AND f1.follower_id = u.id
+          ORDER BY
+            u.date_created DESC;
+      `;
 
     try {
-      // Execute the query
       const { rows } = await pool.query(query, [loggedInUserId]);
-      // Send the results back to the client
-      res.json(rows);
+      const modifiedRows = rows.map(row => ({
+        ...row,
+        // Convert NULL status to 'false' for the application's logic
+        status: row.status || 'false'
+      }));
+      res.json(modifiedRows);
     } catch (error) {
       console.error('Error executing query', error.stack);
       res.status(500).send('Internal Server Error');
     }
-
-  })
+  });
 }

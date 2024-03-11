@@ -20,3 +20,5 @@ exports.down = pgm => {
         DROP TABLE bug_reports;
     `)
 };
+
+
