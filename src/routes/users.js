@@ -106,7 +106,7 @@ module.exports = (app) => {
                 if (err) return next(err);
 
                 try {
-                    const token = jwt.sign({ userId: user.id }, "process.env.JWT_SECRET");
+                    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET);
                     res.json({
                         message: "User registered and authenticated successfully.",
                         email: email,
@@ -137,7 +137,7 @@ module.exports = (app) => {
                 if (err) return next(err);
 
                 try {
-                    const token = jwt.sign({ userId: user.id }, "process.env.JWT_SECRET");
+                    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET);
                     const userWithData = await UserRepo.userData(user.id)
                     // Send back both the token and the user ID
                     res.send({

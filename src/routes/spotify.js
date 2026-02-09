@@ -4,7 +4,7 @@ const querystring = require("querystring");
 
 
 
-const redirect_uri = "NGROK_URL_REMOVED";
+const redirect_uri = process.env.SPOTIFY_REDIRECT_URI;
 const client_id = process.env.SPOTIFY_CLIENT_ID;
 const client_secret = process.env.SPOTIFY_CLIENT_SECRET;
 const stateKey = "spotify_auth_state";
